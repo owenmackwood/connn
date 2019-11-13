@@ -10,14 +10,13 @@ from connectn.utils import ARCHIVE_FORMAT, IS_DEBUGGING
 
 BOARD_SHAPE = (6, 7)
 btype = np.int8
-CONNECT_N = 4
+CONNECT_N = btype(4)
 IS_WIN = btype(1)
 STILL_PLAYING = btype(0)
 IS_DRAW = btype(-1)
 EMPTY = btype(0)
 PLAYER1 = btype(1)
 PLAYER2 = btype(2)
-
 
 class AgentFailed(Exception):
     pass
@@ -28,6 +27,8 @@ def run_games(q: mp.Queue):
     import connectn.agents as cna
     import shutil
     import connectn.results as results
+    REPETITIONS = 1
+    RUN_ALL_AFTER = 60 * 60  # Run all-against-all every 60 minutes
 
     agent_modules = import_agents({})
     results.initialize(agent_modules.keys())
@@ -36,34 +37,38 @@ def run_games(q: mp.Queue):
     while True:
         # Check the message queue for updated agents
         if startup:
-            startup = True
+            startup = False
             updated_agents = list(agents())
             print(f'Just started, running all-against-all once.')
         else:
             print('Game-playing process entering queue to wait for new agents')
-            q_data = q.get(block=True)  #, timeout=10*60)
+            q_data = q.get(block=True, timeout=RUN_ALL_AFTER)
             if isinstance(q_data, str) and q_data == 'SHUTDOWN':
                 return
-            updated_agent_archives = q_data
-            for agent_name, archive_path in updated_agent_archives:
-                module_path = os.path.join(cna.__path__[0], agent_name)
-                if os.path.exists(module_path):
-                    shutil.rmtree(module_path)
-                os.makedirs(module_path)
-                shutil.unpack_archive(archive_path, module_path, ARCHIVE_FORMAT)
-                os.remove(archive_path)
-                results.add_agent(agent_name)
+            elif q_data is None:
+                updated_agents = list(agents())
+                print('Timed out waiting for new agents, running all-against-all.')
+            else:
+                updated_agent_archives = q_data
+                for agent_name, archive_path in updated_agent_archives:
+                    module_path = os.path.join(cna.__path__[0], agent_name)
+                    if os.path.exists(module_path):
+                        shutil.rmtree(module_path)
+                    os.makedirs(module_path)
+                    shutil.unpack_archive(archive_path, module_path, ARCHIVE_FORMAT)
+                    os.remove(archive_path)
+                    results.add_agent(agent_name)
 
-            updated_agents = [agent_name for agent_name, _ in updated_agent_archives]
-            print(f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}')
+                updated_agents = [agent_name for agent_name, _ in updated_agent_archives]
+                print(f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}')
 
         agent_modules = import_agents(agent_modules)
 
         to_play = [g for g in product(agent_modules.keys(), agent_modules.keys())
                    if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)]
 
-        print(f'About to play {len(to_play)} games.')
-        for g in to_play:
+        print(f'About to play {len(to_play)*REPETITIONS} games.')
+        for g in REPETITIONS*to_play:
             game_result = run_game(*g)
             results.add_game(game_result)
         print('Finished game-play round.')
@@ -94,7 +99,7 @@ def run_game_local(agent_1: str, agent_2: str):
         try:
             gen_move[agent_name] = agent_modules[agent_name].generate_move
         except AttributeError:
-            results[agent_name].stderr += 'You did not define generate_move at the package level'
+            results[agent_name].stderr += '\nYou did not define generate_move at the package level'
             gr.winner = other_player(player)
             results[agent_name].outcome = 'FAIL'
             results[agent_names[gr.winner-1]].outcome = 'WIN'
@@ -214,8 +219,6 @@ def run_game_local(agent_1: str, agent_2: str):
 
 
 def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
-    # import psutil
-    # process = psutil.Process(os.getpid())
     from connectn.utils import get_size
     import traceback
     board, player, saved_state = moves_q.get()
@@ -273,19 +276,19 @@ def connected_four(board: np.ndarray, player: btype) -> bool:
     rows, cols = btype(board.shape[0]), btype(board.shape[1])
 
     for row in np.arange(rows):
-        for col in np.arange(cols-3):
-            if np.all(board[row, col:col+4] == player):
+        for col in np.arange(cols-CONNECT_N+1):
+            if np.all(board[row, col:col+CONNECT_N] == player):
                 return True
 
     for col in np.arange(cols):
-        for row in np.arange(rows-3):
-            if np.all(board[row:row+4, col] == player):
+        for row in np.arange(rows-CONNECT_N+1):
+            if np.all(board[row:row+CONNECT_N, col] == player):
                 return True
 
-    for col in np.arange(cols-3):
-        for row in np.arange(rows-3):
+    for col in np.arange(cols-CONNECT_N+1):
+        for row in np.arange(rows-CONNECT_N+1):
             found = True
-            for i in np.arange(btype(4)):
+            for i in np.arange(btype(CONNECT_N)):
                 if board[row+i, col+i] != player:
                     found = False
                     break
@@ -293,8 +296,8 @@ def connected_four(board: np.ndarray, player: btype) -> bool:
                 return True
 
             found = True
-            for i in np.arange(btype(4)):
-                if board[row+(3-i), col+i] != player:
+            for i in np.arange(btype(CONNECT_N)):
+                if board[row+CONNECT_N-(i+1), col+i] != player:
                     found = False
                     break
             if found:

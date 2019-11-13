@@ -6,7 +6,7 @@ import numpy as np
 import os
 import sys
 
-LISTEN_PORT = 9999
+LISTEN_PORT = 2342
 ARCHIVE_FORMAT = 'tar'
 DATA_DIR = os.path.expanduser('~/ppp_results')
 MOVE_TIME_MAX = 10.

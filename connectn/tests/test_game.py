@@ -1,6 +1,6 @@
 import numpy as np
 from connectn.game import apply_player_action, AgentFailed, check_end_state
-from connectn.game import IS_DRAW, PLAYER1, PLAYER2, btype
+from connectn.game import CONNECT_N, STILL_PLAYING, IS_WIN, PLAYER1, PLAYER2, btype
 # from numpy.testing import assert_array_equal, assert_
 
 
@@ -20,8 +20,49 @@ def test_apply_player_action_success(empty_board):
 def test_apply_player_action_fail(full_board_p1):
     for col in np.arange(full_board_p1.shape[1], dtype=btype):
         try:
-            apply_player_action(full_board_p1, col, btype(1))
+            apply_player_action(full_board_p1, col, PLAYER1)
         except AgentFailed:
             pass
         else:
             assert False, "Failed to throw exception when playing in full column."
+
+
+def test_check_end_state_rows(empty_board):
+    for i in range(CONNECT_N-1):
+        for row in range(empty_board.shape[0]):
+            for col in range(empty_board.shape[1]-CONNECT_N+i+1):
+                for player in (PLAYER1, PLAYER2):
+                    b0 = empty_board.copy()
+                    b0[row, col:col+CONNECT_N-i] = player
+                    if i == 0:
+                        assert check_end_state(b0, player) == IS_WIN
+                    else:
+                        assert check_end_state(b0, player) == STILL_PLAYING
+
+
+def test_check_end_state_cols(empty_board):
+    for i in range(CONNECT_N-1):
+        for col in range(empty_board.shape[1]):
+            for row in range(empty_board.shape[0]-CONNECT_N+i+1):
+                for player in (PLAYER1, PLAYER2):
+                    b0 = empty_board.copy()
+                    b0[row:row+CONNECT_N-i, col] = player
+                    if i == 0:
+                        assert check_end_state(b0, player) == IS_WIN
+                    else:
+                        assert check_end_state(b0, player) == STILL_PLAYING
+
+
+def test_check_end_state_diagonal(empty_board):
+    for i in range(CONNECT_N-1):
+        n_diagonal = np.diag(PLAYER1*np.ones(CONNECT_N-i, dtype=btype))[:, ::-1]
+        for n_conn in (n_diagonal, n_diagonal[:, ::-1]):
+            for row in range(empty_board.shape[0]-CONNECT_N+i+1):
+                for col in range(empty_board.shape[1]-CONNECT_N+i+1):
+                    for player in (PLAYER1, PLAYER2):
+                        b0 = empty_board.copy()
+                        b0[row:row+CONNECT_N-i, col:col+CONNECT_N-i] = n_conn
+                        if i == 0:
+                            assert check_end_state(b0, player) == IS_WIN
+                        else:
+                            assert check_end_state(b0, player) == STILL_PLAYING
