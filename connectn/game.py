@@ -19,9 +19,9 @@ PLAYER1 = btype(1)
 PLAYER2 = btype(2)
 
 
-
 class AgentFailed(Exception):
     pass
+
 
 def run_games(q: mp.Queue):
     from itertools import product
@@ -37,7 +37,7 @@ def run_games(q: mp.Queue):
         # Check the message queue for updated agents
         if startup:
             startup = True
-            updated_agents = list(agents)
+            updated_agents = list(agents())
             print(f'Just started, running all-against-all once.')
         else:
             print('Game-playing process entering queue to wait for new agents')
@@ -68,10 +68,12 @@ def run_games(q: mp.Queue):
             results.add_game(game_result)
         print('Finished game-play round.')
 
+
 def run_game_cluster(agent_1: str, agent_2: str):
     # import connectn
     # connectn.__path__
     print(f'Submitting game between {agent_1} and {agent_2} to the queue.')
+
 
 def run_game_local(agent_1: str, agent_2: str):
     '''
@@ -210,6 +212,7 @@ def run_game_local(agent_1: str, agent_2: str):
         results[agent_2].outcome = 'WIN'
     return gr
 
+
 def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     # import psutil
     # process = psutil.Process(os.getpid())
@@ -232,6 +235,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
 
     moves_q.put((status, size, action, saved_state))
 
+
 def pretty_print_board(board: np.ndarray):
     bs = '|' + '='*2*board.shape[1] + '|\n'
     for i in range(board.shape[0]-1, -1, -1):
@@ -247,9 +251,11 @@ def pretty_print_board(board: np.ndarray):
 
     return bs
 
+
 @nb.njit(cache=True)
 def other_player(player: btype) -> btype:
     return (PLAYER2, PLAYER1)[player - 1]
+
 
 @nb.njit(cache=True)
 def apply_player_action(board: np.ndarray, col: btype, player: btype, copy: bool = False):
@@ -260,6 +266,7 @@ def apply_player_action(board: np.ndarray, col: btype, player: btype, copy: bool
             board[row, col] = player
             return board
     raise AgentFailed('Column was full! ')
+
 
 @nb.njit(cache=True)
 def connected_four(board: np.ndarray, player: btype) -> bool:
@@ -295,6 +302,7 @@ def connected_four(board: np.ndarray, player: btype) -> bool:
 
     return False
 
+
 @nb.njit(cache=True)
 def check_end_state(board: np.ndarray, player: btype) -> btype:
     '''
@@ -306,6 +314,7 @@ def check_end_state(board: np.ndarray, player: btype) -> btype:
     if np.sum(board == EMPTY) == 0:
         return IS_DRAW
     return STILL_PLAYING
+
 
 def human_vs_agent(generate_move: GenMove):
     def user_move(board, player, saved_state):
@@ -347,6 +356,7 @@ class AgentResult:
         self.stderr: str = stderr
         self.outcome: str = 'NONE'
 
+
 class GameResult:
     def __init__(self, agent_r1: AgentResult, agent_r2: AgentResult):
         self.result_1: AgentResult = agent_r1
@@ -354,6 +364,7 @@ class GameResult:
         self.winner: int = -1
         self.time_sec: float = time.time()
         self.time_str: str = time.ctime()
+
 
 if ON_CLUSTER:
     run_game = run_game_cluster

@@ -9,20 +9,24 @@ from connectn.utils import DATA_DIR
 key_salt_file = os.path.join(DATA_DIR, 'keys_salts')
 user_auth = {}
 
+
 def load_user_auth() -> Dict[str, Tuple[bytes, bytes]]:
     global user_auth
-    if len(user_auth) < 1:
+    if len(user_auth) < 1 and os.path.exists(key_salt_file):
         with open(key_salt_file, 'rb') as f:
             user_auth.update(pickle.load(f))
     return user_auth
 
 
-# agents = ['agent_mctsh', 'agent_mcts'] + list(load_user_auth().keys())
-agents = ['agent_random', 'agent_columns', 'agent_rows', 'agent_mcts'] + list(load_user_auth().keys())
+def agents():
+    # agents = ['agent_mctsh', 'agent_mcts'] + list(load_user_auth().keys())
+    agent_names = ['agent_random', 'agent_columns', 'agent_rows', 'agent_mcts'] + list(load_user_auth().keys())
+    return agent_names
+
 
 def import_agents(agent_modules: Dict[str, ModuleType]) -> Dict[str, ModuleType]:
     new_modules = dict()
-    for agent in agents:
+    for agent in agents():
         name = '.'.join(('connectn', 'agents', agent))
         new_load = agent not in agent_modules
         try:
@@ -78,3 +82,7 @@ def generate_users(num_users: int, pw_length: int=8, append: bool=True):
 
     with open(key_salt_file, 'wb') as f:
         pickle.dump(new_users_key_salt, f)
+
+
+if __name__ == '__main__':
+    generate_users(1, append=False)
