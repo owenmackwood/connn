@@ -2,6 +2,7 @@ import socket
 
 
 def run_server():
+    import logging
     import multiprocessing as mp
     from connectn.utils import LISTEN_PORT, InactiveSocket
     from connectn.game import run_games
@@ -33,6 +34,8 @@ def run_server():
                 except Exception as e:
                     print(f'Unexpected error {type(e)}')
                     print('Will try to keep running.')
+        except:
+            logging.exception('Failure in the server')
         finally:
             ls.shutdown(socket.SHUT_RDWR)
             print("Closed server socket")

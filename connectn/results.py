@@ -7,7 +7,7 @@ from connectn.utils import DATA_DIR
 from connectn.game import GameResult
 from typing import Iterable
 
-results_file = os.path.join(DATA_DIR, 'results.h5')
+RESULTS_FILE_PATH = DATA_DIR / 'results.h5'
 name_size = 32
 
 '''
@@ -62,7 +62,7 @@ class GameOutcomeRow(IsDescription):
 
 
 def add_agent(agent_name: str):
-    with tables.open_file(results_file, 'a') as f:
+    with tables.open_file(str(RESULTS_FILE_PATH), 'a') as f:
         try:
             av_table = f.get_node('/agents', agent_name)
         except tables.NoSuchNodeError:
@@ -99,7 +99,7 @@ def add_agent(agent_name: str):
 
 
 def get_agent_version(agent_name: str):
-    with tables.open_file(results_file, 'r') as f:
+    with tables.open_file(str(RESULTS_FILE_PATH), 'r') as f:
         found = False
         version = -1
         for ac_row in f.root.current.where(f'(name == b"{agent_name}")'):
@@ -110,7 +110,7 @@ def get_agent_version(agent_name: str):
 
 
 def record_outcome(agent_name: str, outcome: str):
-    with tables.open_file(results_file, 'a') as f:
+    with tables.open_file(str(RESULTS_FILE_PATH), 'a') as f:
         vt = f.get_node('/agents', agent_name)
         for row in vt.iterrows(start=-1):
             if outcome == 'WIN':
@@ -137,9 +137,9 @@ def add_game(game_result: GameResult):
 
 
 def add_game_for_agent(agent_name: str, game_result: GameResult):
-    fn = agent_games_file_name(agent_name)
+    fp = agent_games_file_path(agent_name)
     version = get_agent_version(agent_name)
-    f = tables.open_file(fn, 'w' if not os.path.exists(fn) else 'a')
+    f = tables.open_file(str(fp), 'w' if not fp.exists() else 'a')
     ver_str = f'v{version:06}'
     try:
         vg = f.get_node('/', ver_str)
@@ -198,11 +198,11 @@ def add_game_for_agent(agent_name: str, game_result: GameResult):
 
 
 def initialize(agent_names: Iterable[str]):
-    if not os.path.exists(results_file):
+    if not RESULTS_FILE_PATH.exists():
         agent_names = list(agent_names)
         t_str = time.ctime()
         t_sec = time.time()
-        with tables.open_file(results_file, 'w') as f:
+        with tables.open_file(str(RESULTS_FILE_PATH), 'w') as f:
             ct = f.create_table('/', 'current', CurrentAgentRow, createparents=True)
             for agent_name, row in zip(agent_names, ct.row):
                 row['name'] = agent_name
@@ -214,5 +214,5 @@ def initialize(agent_names: Iterable[str]):
             add_agent(agent_name)
 
 
-def agent_games_file_name(agent_name):
-    return os.path.join(DATA_DIR, f'{agent_name}.h5')
+def agent_games_file_path(agent_name):
+    return DATA_DIR / f'{agent_name}.h5'

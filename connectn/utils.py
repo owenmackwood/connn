@@ -1,14 +1,16 @@
 import Stockings
 import time
 from time import sleep
-from typing import Callable, Tuple, Optional
+from typing import Callable, Tuple, Optional, List
 import numpy as np
 import os
 import sys
+from pathlib import Path
 
 LISTEN_PORT = 2342
 ARCHIVE_FORMAT = 'tar'
-DATA_DIR = os.path.expanduser('~/ppp_results')
+DATA_DIR: Path = Path.home() / 'ppp_results'
+KEY_SALT_FILE: Path = DATA_DIR / 'keys_salts'
 MOVE_TIME_MAX = 10.
 STATE_MEMORY_MAX = 2**30  # Max of 1 GB
 ON_CLUSTER = False
@@ -21,11 +23,12 @@ import numba as nb
 class SavedState:
     pass
 
-GenMove = Callable[[np.ndarray, int, Optional[SavedState]], Tuple[int, SavedState]]
+GenMove = Callable[[np.ndarray, int, Optional[SavedState]], Tuple[int, Optional[SavedState]]]
 
 
 class InactiveSocket(Exception):
     pass
+
 
 class ComfyStockings(Stockings.Stocking):
     def __exit__(self, typ, value, tb):
@@ -51,6 +54,7 @@ class ComfyStockings(Stockings.Stocking):
             if dt > timeout:
                 raise InactiveSocket('Timed out waiting for reply')
         raise InactiveSocket('Socket became inactive while waiting for reply')
+
 
 nb.njit(cache=True)
 def get_size(obj, seen=None):
@@ -86,3 +90,23 @@ def get_size(obj, seen=None):
         size += sum(get_size(getattr(obj, s), seen) for s in obj.__slots__ if hasattr(obj, s))
 
     return size
+
+
+def mib(n_bytes: int) -> float:
+    return n_bytes / 2**20
+
+
+def update_user_agent_code(updated_agent_archives: List[Tuple[str, str]]) -> List[str]:
+    from connectn import results
+    import connectn.agents as cna
+    import shutil
+    for agent_name, archive_path in updated_agent_archives:
+        module_path = os.path.join(cna.__path__[0], agent_name)
+        if os.path.exists(module_path):
+            shutil.rmtree(module_path)
+        os.makedirs(module_path)
+        shutil.unpack_archive(archive_path, module_path, ARCHIVE_FORMAT)
+        os.remove(archive_path)
+        results.add_agent(agent_name)
+    updated_agents = [agent_name for agent_name, _ in updated_agent_archives]
+    return updated_agents
