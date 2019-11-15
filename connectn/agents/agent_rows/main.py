@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Tuple
 from connectn.utils import SavedState
-from connectn.game import EMPTY
+from connectn.game import NO_PLAYER
 
 class SavedRows(SavedState):
     def __init__(self, col: int):
@@ -14,7 +14,7 @@ def generate_move(board: np.ndarray, player: int, saved_state: SavedRows) -> Tup
     cols = np.roll(np.arange(board.shape[1]), -(prev_col+1))
     for j in cols:
         for i in range(board.shape[0]):
-            if board[i, j] == EMPTY:
+            if board[i, j] == NO_PLAYER:
                 saved_state.col = j
                 return j, saved_state
 

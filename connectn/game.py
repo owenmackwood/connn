@@ -3,7 +3,6 @@ import multiprocessing as mp
 import numpy as np
 import traceback
 import logging
-from enum import Enum
 from typing import List, Optional
 from connectn.utils import GenMove, nb, mib
 from connectn.users import import_agents, agents
@@ -19,7 +18,7 @@ STILL_PLAYING = BoardValue(0)
 IS_DRAW = BoardValue(-1)
 
 BoardPiece = np.int8
-EMPTY = BoardPiece(0)
+NO_PLAYER = BoardPiece(0)
 PLAYER1 = BoardPiece(1)
 PLAYER2 = BoardPiece(2)
 
@@ -43,7 +42,7 @@ class GameResult:
     def __init__(self, agent_r1: AgentResult, agent_r2: AgentResult):
         self.result_1: AgentResult = agent_r1
         self.result_2: AgentResult = agent_r2
-        self.winner: BoardPiece = EMPTY
+        self.winner: BoardPiece = NO_PLAYER
         self.time_sec: float = time.time()
         self.time_str: str = time.ctime()
 
@@ -111,7 +110,7 @@ def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> Game
 
     states = {agent_name:None for agent_name in agent_names}
 
-    winner = player = EMPTY
+    winner = player = NO_PLAYER
     agent_name = agent_1
     results = {PLAYER1:AgentResult(agent_1, []),
                PLAYER2:AgentResult(agent_2, [])}
@@ -182,7 +181,7 @@ def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> Game
             winner = player
             print(f"Game finished, {get_name(player)} won by playing column {action}.")
         elif end_state == IS_DRAW:
-            winner = EMPTY
+            winner = NO_PLAYER
             print("Game finished, no winner")
         else:
             print("Something went wrong, game-play stopped before the end state.")
@@ -235,7 +234,7 @@ def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> Game
     #     print(f'TIME {agent} mu:{np.mean(saved_state.time):.2f}, med:{np.median(saved_state.time):.2f}, max:{np.max(saved_state.time):.2f}')
 
     gr.winner = winner
-    if winner == EMPTY:
+    if winner == NO_PLAYER:
         results[PLAYER1].outcome = results[PLAYER2].outcome = 'DRAW'
     else:
         results[PLAYER1 if winner == PLAYER1 else PLAYER2].outcome = 'WIN'
@@ -272,7 +271,7 @@ def pretty_print_board(board: np.ndarray):
     for i in range(board.shape[0]-1, -1, -1):
         bs+= '|'
         for j in range(board.shape[1]):
-            bs += '  ' if board[i,j] == EMPTY else ('X ' if board[i,j] == PLAYER1 else 'O ')
+            bs += '  ' if board[i,j] == NO_PLAYER else ('X ' if board[i, j] == PLAYER1 else 'O ')
         bs += '|\n'
     bs += '|' + '='*2*board.shape[1] + '|\n'
     bs += '|'
@@ -285,7 +284,7 @@ def pretty_print_board(board: np.ndarray):
 
 def initialize_game_state() -> np.ndarray:
     board = np.empty(shape=(CONNECT_N+2, CONNECT_N+3), dtype=btype)
-    board.fill(EMPTY)
+    board.fill(NO_PLAYER)
     return board
 
 
@@ -303,7 +302,7 @@ def apply_player_action(board: np.ndarray, action: btype, player: BoardPiece, co
     if copy:
         board = board.copy()
     for row in np.arange(btype(board.shape[0])):
-        if board[row, action] == EMPTY:
+        if board[row, action] == NO_PLAYER:
             board[row, action] = player
             return board
     raise AgentFailed('Column was full! ')
@@ -352,7 +351,7 @@ def check_end_state(board: np.ndarray, player: BoardPiece) -> BoardValue:
     '''
     if connected_four(board, player):
         return IS_WIN
-    if np.sum(board == EMPTY) == 0:
+    if np.sum(board == NO_PLAYER) == 0:
         return IS_DRAW
     return STILL_PLAYING
 
