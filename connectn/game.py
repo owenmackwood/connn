@@ -63,7 +63,7 @@ def run_games(q: mp.Queue, play_all: bool = True):
     results.initialize(agent_modules.keys())
     while True:
         if play_all:
-            play_all = True
+            play_all = False
             updated_agents = list(agents())
             print(f"Just started, running all-against-all once.")
         else:
