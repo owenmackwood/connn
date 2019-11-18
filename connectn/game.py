@@ -9,8 +9,9 @@ from connectn.users import import_agents, agents
 from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
 from connectn.utils import IS_DEBUGGING
 
-btype = np.int8
-CONNECT_N = btype(4)
+CONNECT_N = np.int8(4)
+
+PlayerAction = np.int8
 
 BoardValue = np.int8
 IS_WIN = BoardValue(1)
@@ -198,7 +199,7 @@ def run_game_local(
                     raise AgentFailed(
                         f"Agent {agent_name} returned an invalid action {action}"
                     )
-                apply_player_action(game_state, btype(action), player)
+                apply_player_action(game_state, PlayerAction(action), player)
                 end_state = check_end_state(game_state, player)
                 playing = end_state == STILL_PLAYING
                 states[agent_name] = state_n
@@ -316,12 +317,12 @@ def pretty_print_board(board: np.ndarray):
 
 
 def initialize_game_state() -> np.ndarray:
-    board = np.empty(shape=(CONNECT_N + 2, CONNECT_N + 3), dtype=btype)
+    board = np.empty(shape=(CONNECT_N + 2, CONNECT_N + 3), dtype=BoardPiece)
     board.fill(NO_PLAYER)
     return board
 
 
-def valid_player_action(board: np.ndarray, action: btype) -> bool:
+def valid_player_action(board: np.ndarray, action: PlayerAction) -> bool:
     return 0 <= action < board.shape[1]
 
 
@@ -332,11 +333,11 @@ def other_player(player: BoardPiece) -> BoardPiece:
 
 @nb.njit(cache=True)
 def apply_player_action(
-    board: np.ndarray, action: btype, player: BoardPiece, copy: bool = False
+    board: np.ndarray, action: PlayerAction, player: BoardPiece, copy: bool = False
 ) -> np.ndarray:
     if copy:
         board = board.copy()
-    for row in np.arange(btype(board.shape[0])):
+    for row in np.arange(PlayerAction(board.shape[0])):
         if board[row, action] == NO_PLAYER:
             board[row, action] = player
             return board
@@ -345,7 +346,7 @@ def apply_player_action(
 
 @nb.njit(cache=True)
 def connected_four(board: np.ndarray, player: BoardPiece) -> bool:
-    rows, cols = btype(board.shape[0]), btype(board.shape[1])
+    rows, cols = PlayerAction(board.shape[0]), PlayerAction(board.shape[1])
 
     for row in np.arange(rows):
         for col in np.arange(cols - CONNECT_N + 1):
@@ -360,7 +361,7 @@ def connected_four(board: np.ndarray, player: BoardPiece) -> bool:
     for col in np.arange(cols - CONNECT_N + 1):
         for row in np.arange(rows - CONNECT_N + 1):
             found = True
-            for i in np.arange(btype(CONNECT_N)):
+            for i in np.arange(PlayerAction(CONNECT_N)):
                 if board[row + i, col + i] != player:
                     found = False
                     break
@@ -368,7 +369,7 @@ def connected_four(board: np.ndarray, player: BoardPiece) -> bool:
                 return True
 
             found = True
-            for i in np.arange(btype(CONNECT_N)):
+            for i in np.arange(PlayerAction(CONNECT_N)):
                 if board[row + CONNECT_N - (i + 1), col + i] != player:
                     found = False
                     break
@@ -409,7 +410,6 @@ def human_vs_agent(generate_move: GenMove):
         while playing:
             gen_moves = (generate_move, user_move)[::play_first]
             for player, gen_move in zip((PLAYER1, PLAYER2), gen_moves):
-                player = btype(player)
                 action, saved_state = gen_move(board, player, saved_state)
                 apply_player_action(board, action, player)
                 end_state = check_end_state(board, player)
