@@ -111,7 +111,7 @@ def test_generate_move_process(empty_board: np.ndarray):
     status, error_msg = ret
     assert status == STATUS_FAILURE
     assert error_msg.startswith("Exception('Test failure')")
-    assert error_msg.endswith("raise Exception('Test failure')\n")
+    assert error_msg.endswith('raise Exception("Test failure")\n')
 
 
 def test_run_game_local():

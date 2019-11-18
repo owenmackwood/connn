@@ -18,8 +18,8 @@ def load_user_auth() -> Dict[str, Tuple[bytes, bytes]]:
 
 
 def agents() -> List[str]:
-    builtin_agents = ["agent_mctsh", "agent_mcts"]
-    # builtin_agents = ['agent_random', 'agent_columns', 'agent_rows', 'agent_mcts', 'agent_fail']
+    # builtin_agents = ["agent_mctsh", "agent_mcts"]
+    builtin_agents = ['agent_random', 'agent_columns', 'agent_rows', 'agent_mcts', 'agent_fail']
     agent_names = builtin_agents + list(load_user_auth().keys())
     return agent_names
 
