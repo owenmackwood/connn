@@ -3,7 +3,10 @@ from typing import Tuple
 from connectn.utils import SavedState
 from connectn.game import NO_PLAYER
 
-def generate_move(board: np.ndarray, player: int, saved_state: SavedState) -> Tuple[int, SavedState]:
+
+def generate_move(
+    board: np.ndarray, player: int, saved_state: SavedState
+) -> Tuple[int, SavedState]:
     cols = np.arange(board.shape[1])
     np.random.shuffle(cols)
     for col in cols:

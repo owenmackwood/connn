@@ -25,17 +25,20 @@ PLAYER2 = BoardPiece(2)
 STATUS_SUCCESS = 0
 STATUS_FAILURE = 1
 
+
 class AgentFailed(Exception):
     pass
 
 
 class AgentResult:
-    def __init__(self, agent_name: str, moves: List[int], stdout: str='', stderr: str=''):
+    def __init__(
+        self, agent_name: str, moves: List[int], stdout: str = "", stderr: str = ""
+    ):
         self.name: str = agent_name
         self.moves: List[int] = moves
         self.stdout: str = stdout
         self.stderr: str = stderr
-        self.outcome: str = 'NONE'
+        self.outcome: str = "NONE"
 
 
 class GameResult:
@@ -52,6 +55,7 @@ def run_games(q: mp.Queue, play_all: bool = True):
     from queue import Empty as EmptyQueue
     from connectn.utils import update_user_agent_code
     import connectn.results as results
+
     REPETITIONS = 1
     RUN_ALL_AFTER = 60 * 60  # Run all-against-all every 60 minutes
 
@@ -59,61 +63,69 @@ def run_games(q: mp.Queue, play_all: bool = True):
     results.initialize(agent_modules.keys())
     while True:
         if play_all:
-            play_all = False
+            play_all = True
             updated_agents = list(agents())
-            print(f'Just started, running all-against-all once.')
+            print(f"Just started, running all-against-all once.")
         else:
             # Check the message queue for updated agents
-            print('Game-playing process entering queue to wait for new agents')
+            print("Game-playing process entering queue to wait for new agents")
             try:
                 q_data = q.get(block=True, timeout=RUN_ALL_AFTER)
             except EmptyQueue:
                 updated_agents = list(agents())
-                print('Timed out waiting for new agents, running all-against-all.')
+                print("Timed out waiting for new agents, running all-against-all.")
             else:
-                if isinstance(q_data, str) and q_data == 'SHUTDOWN':
+                if isinstance(q_data, str) and q_data == "SHUTDOWN":
                     return
                 else:
                     updated_agents = update_user_agent_code(q_data)
-                    print(f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}')
+                    print(
+                        f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
+                    )
 
         agent_modules = import_agents(agent_modules)
-        agent_modules.pop('agent_fail', None)
+        agent_modules.pop("agent_fail", None)
 
-        to_play = [g for g in product(agent_modules.keys(), agent_modules.keys())
-                   if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)]
+        to_play = [
+            g
+            for g in product(agent_modules.keys(), agent_modules.keys())
+            if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
+        ]
 
-        print(f'About to play {len(to_play)*REPETITIONS} games.')
-        for g in REPETITIONS*to_play:
+        print(f"About to play {len(to_play)*REPETITIONS} games.")
+        for g in REPETITIONS * to_play:
             try:
                 game_result = run_game(*g)
                 results.add_game(game_result)
             except:
-                logging.exception('This should not happen, unless we are testing')
-        print('Finished game-play round.')
+                logging.exception("This should not happen, unless we are testing")
+        print("Finished game-play round.")
 
 
 def run_game_cluster(agent_1: str, agent_2: str):
-    print(f'Submitting game between {agent_1} and {agent_2} to the queue.')
-    raise NotImplementedError('No implementation of run_game_cluster yet')
+    print(f"Submitting game between {agent_1} and {agent_2} to the queue.")
+    raise NotImplementedError("No implementation of run_game_cluster yet")
 
 
-def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> GameResult:
-    '''
+def run_game_local(
+    agent_1: str, agent_2: str, seed: Optional[int] = None
+) -> GameResult:
+    """
     Likely has to be replaced by separate function runnable via the GridEngine
-    '''
+    """
     import matplotlib.pyplot as plt
+
     agent_modules = import_agents({})
     agent_names = (agent_1, agent_2)
-    def get_name(player: BoardPiece) -> str:
-        return agent_names[player-1]
 
-    states = {agent_name:None for agent_name in agent_names}
+    def get_name(player: BoardPiece) -> str:
+        return agent_names[player - 1]
+
+    states = {agent_name: None for agent_name in agent_names}
 
     winner = player = NO_PLAYER
     agent_name = agent_1
-    results = {PLAYER1:AgentResult(agent_1, []),
-               PLAYER2:AgentResult(agent_2, [])}
+    results = {PLAYER1: AgentResult(agent_1, []), PLAYER2: AgentResult(agent_2, [])}
     gr = GameResult(results[PLAYER1], results[PLAYER2])
 
     gen_move = {}
@@ -121,21 +133,23 @@ def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> Game
         try:
             gen_move[agent_name] = agent_modules[agent_name].generate_move
         except AttributeError:
-            results[player].stderr += '\nYou did not define generate_move at the package level'
+            results[
+                player
+            ].stderr += "\nYou did not define generate_move at the package level"
             gr.winner = other_player(player)
-            results[player].outcome = 'FAIL'
-            results[gr.winner].outcome = 'WIN'
+            results[player].outcome = "FAIL"
+            results[gr.winner].outcome = "WIN"
             return gr
         except KeyError as e:
             # If this occurs and it isn't for agent_fail, then something has gone terribly wrong.
             # Presumably one of the agents is not defined in users.py
-            logging.exception('Something has gone terribly wrong')
+            logging.exception("Something has gone terribly wrong")
             raise e
 
-    LOSER_RESULT = 'LOSS'
+    LOSER_RESULT = "LOSS"
     game_state = initialize_game_state()
     try:
-        print(f'Playing game between {agent_1} and {agent_2}')
+        print(f"Playing game between {agent_1} and {agent_2}")
         moves_q = mp.Manager().Queue()
 
         end_state = STILL_PLAYING
@@ -147,29 +161,43 @@ def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> Game
                     generate_move_process(gen_move[agent_name], moves_q)
                     ret = moves_q.get()
                 else:
-                    ap = mp.Process(target=generate_move_process,
-                                    args=(gen_move[agent_name], moves_q))
+                    ap = mp.Process(
+                        target=generate_move_process,
+                        args=(gen_move[agent_name], moves_q),
+                    )
                     ap.start()
                     ap.join(MOVE_TIME_MAX)
-                    ret = moves_q.get(block=True, timeout=MOVE_TIME_MAX)
                     if ap.is_alive():
                         ap.terminate()
-                        raise AgentFailed(f"Agent {agent_name} timed out after {MOVE_TIME_MAX} seconds.")
+                        raise AgentFailed(
+                            f"Agent {agent_name} timed out after {MOVE_TIME_MAX} seconds."
+                        )
+                    ret = moves_q.get(block=True)
 
                 status = ret[0]
                 if status != STATUS_SUCCESS:
-                    raise AgentFailed(f"Agent {agent_name} threw an exception:\n {ret[1]}")
+                    raise AgentFailed(
+                        f"Agent {agent_name} threw an exception:\n {ret[1]}"
+                    )
 
                 final_memory, action, state_n = ret[1:]
                 if final_memory > STATE_MEMORY_MAX:
-                    raise AgentFailed(f"Agent {agent_name} used {mib(final_memory):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB")
-                elif not isinstance(action, (int, np.int8, np.int16, np.int32, np.int64)):
-                    raise AgentFailed(f"Agent {agent_name} returned an invalid type of action {type(action)}")
+                    raise AgentFailed(
+                        f"Agent {agent_name} used {mib(final_memory):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB"
+                    )
+                elif not isinstance(
+                    action, (int, np.int8, np.int16, np.int32, np.int64)
+                ):
+                    raise AgentFailed(
+                        f"Agent {agent_name} returned an invalid type of action {type(action)}"
+                    )
 
                 results[player].moves.append(action)
 
                 if not valid_player_action(game_state, action):
-                    raise AgentFailed(f"Agent {agent_name} returned an invalid action {action}")
+                    raise AgentFailed(
+                        f"Agent {agent_name} returned an invalid action {action}"
+                    )
                 apply_player_action(game_state, btype(action), player)
                 end_state = check_end_state(game_state, player)
                 playing = end_state == STILL_PLAYING
@@ -188,11 +216,11 @@ def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> Game
 
     except AgentFailed as err:
         print(pretty_print_board(game_state))
-        print(f'Agent failed: {agent_name}')
+        print(f"Agent failed: {agent_name}")
         print(err)
         winner = other_player(player)
         results[player].stderr += str(err)
-        LOSER_RESULT = 'FAIL'
+        LOSER_RESULT = "FAIL"
 
     # fig = plt.figure()
     # fig.suptitle('Odds of win')
@@ -235,9 +263,9 @@ def run_game_local(agent_1: str, agent_2: str, seed: Optional[int]=None) -> Game
 
     gr.winner = winner
     if winner == NO_PLAYER:
-        results[PLAYER1].outcome = results[PLAYER2].outcome = 'DRAW'
+        results[PLAYER1].outcome = results[PLAYER2].outcome = "DRAW"
     else:
-        results[PLAYER1 if winner == PLAYER1 else PLAYER2].outcome = 'WIN'
+        results[PLAYER1 if winner == PLAYER1 else PLAYER2].outcome = "WIN"
         results[PLAYER2 if winner == PLAYER1 else PLAYER1].outcome = LOSER_RESULT
     return gr
 
@@ -247,6 +275,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     from traceback import StackSummary
     from random import seed as random_seed
     import logging
+
     seed, board, player, saved_state = moves_q.get()
     np.random.seed(seed)
     random_seed(seed)
@@ -257,8 +286,8 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
         moves_q.put((STATUS_SUCCESS, size, action, saved_state))
 
     except Exception as e:
-        logging.exception('An exception was thrown by the agent.')
-        error_msg = repr(e) + '\n'
+        logging.exception("An exception was thrown by the agent.")
+        error_msg = repr(e) + "\n"
         extracted_list = traceback.extract_tb(e.__traceback__)
         for item in StackSummary.from_list(extracted_list).format():
             error_msg += str(item)
@@ -267,23 +296,27 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
 
 
 def pretty_print_board(board: np.ndarray):
-    bs = '|' + '='*2*board.shape[1] + '|\n'
-    for i in range(board.shape[0]-1, -1, -1):
-        bs+= '|'
+    bs = "|" + "=" * 2 * board.shape[1] + "|\n"
+    for i in range(board.shape[0] - 1, -1, -1):
+        bs += "|"
         for j in range(board.shape[1]):
-            bs += '  ' if board[i,j] == NO_PLAYER else ('X ' if board[i, j] == PLAYER1 else 'O ')
-        bs += '|\n'
-    bs += '|' + '='*2*board.shape[1] + '|\n'
-    bs += '|'
+            bs += (
+                "  "
+                if board[i, j] == NO_PLAYER
+                else ("X " if board[i, j] == PLAYER1 else "O ")
+            )
+        bs += "|\n"
+    bs += "|" + "=" * 2 * board.shape[1] + "|\n"
+    bs += "|"
     for j in range(board.shape[1]):
-        bs += str(j) + ' '
-    bs += '|'
+        bs += str(j) + " "
+    bs += "|"
 
     return bs
 
 
 def initialize_game_state() -> np.ndarray:
-    board = np.empty(shape=(CONNECT_N+2, CONNECT_N+3), dtype=btype)
+    board = np.empty(shape=(CONNECT_N + 2, CONNECT_N + 3), dtype=btype)
     board.fill(NO_PLAYER)
     return board
 
@@ -298,14 +331,16 @@ def other_player(player: BoardPiece) -> BoardPiece:
 
 
 @nb.njit(cache=True)
-def apply_player_action(board: np.ndarray, action: btype, player: BoardPiece, copy: bool = False) -> np.ndarray:
+def apply_player_action(
+    board: np.ndarray, action: btype, player: BoardPiece, copy: bool = False
+) -> np.ndarray:
     if copy:
         board = board.copy()
     for row in np.arange(btype(board.shape[0])):
         if board[row, action] == NO_PLAYER:
             board[row, action] = player
             return board
-    raise AgentFailed('Column was full! ')
+    raise AgentFailed("Column was full! ")
 
 
 @nb.njit(cache=True)
@@ -313,20 +348,20 @@ def connected_four(board: np.ndarray, player: BoardPiece) -> bool:
     rows, cols = btype(board.shape[0]), btype(board.shape[1])
 
     for row in np.arange(rows):
-        for col in np.arange(cols-CONNECT_N+1):
-            if np.all(board[row, col:col+CONNECT_N] == player):
+        for col in np.arange(cols - CONNECT_N + 1):
+            if np.all(board[row, col : col + CONNECT_N] == player):
                 return True
 
     for col in np.arange(cols):
-        for row in np.arange(rows-CONNECT_N+1):
-            if np.all(board[row:row+CONNECT_N, col] == player):
+        for row in np.arange(rows - CONNECT_N + 1):
+            if np.all(board[row : row + CONNECT_N, col] == player):
                 return True
 
-    for col in np.arange(cols-CONNECT_N+1):
-        for row in np.arange(rows-CONNECT_N+1):
+    for col in np.arange(cols - CONNECT_N + 1):
+        for row in np.arange(rows - CONNECT_N + 1):
             found = True
             for i in np.arange(btype(CONNECT_N)):
-                if board[row+i, col+i] != player:
+                if board[row + i, col + i] != player:
                     found = False
                     break
             if found:
@@ -334,7 +369,7 @@ def connected_four(board: np.ndarray, player: BoardPiece) -> bool:
 
             found = True
             for i in np.arange(btype(CONNECT_N)):
-                if board[row+CONNECT_N-(i+1), col+i] != player:
+                if board[row + CONNECT_N - (i + 1), col + i] != player:
                     found = False
                     break
             if found:
@@ -345,10 +380,10 @@ def connected_four(board: np.ndarray, player: BoardPiece) -> bool:
 
 @nb.njit(cache=True)
 def check_end_state(board: np.ndarray, player: BoardPiece) -> BoardValue:
-    '''
+    """
     :param board:
     :return: 1 if winning state, 0 if still playing, -1 if board is full
-    '''
+    """
     if connected_four(board, player):
         return IS_WIN
     if np.sum(board == NO_PLAYER) == 0:
@@ -381,12 +416,11 @@ def human_vs_agent(generate_move: GenMove):
                 if end_state != STILL_PLAYING:
                     print(pretty_print_board(board))
                     if end_state == IS_DRAW:
-                        print('Game ended in draw')
+                        print("Game ended in draw")
                     else:
                         print(f'Player {"X" if player == PLAYER1 else "O"} won')
                     playing = False
                     break
-
 
 
 if ON_CLUSTER:
