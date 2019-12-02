@@ -3,7 +3,7 @@ import multiprocessing as mp
 import numpy as np
 import traceback
 import logging
-from typing import List, Optional
+from typing import List, Tuple, Optional
 from connectn.utils import GenMove, nb, mib
 from connectn.users import import_agents, agents
 from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
@@ -37,6 +37,7 @@ class AgentResult:
     ):
         self.name: str = agent_name
         self.moves: List[int] = moves
+        self.move_times: List[float] = []
         self.stdout: str = stdout
         self.stderr: str = stderr
         self.outcome: str = "NONE"
@@ -149,6 +150,7 @@ def run_game_local(
 
     LOSER_RESULT = "LOSS"
     game_state = initialize_game_state()
+    nth_move = 0
     try:
         print(f"Playing game between {agent_1} and {agent_2}")
         moves_q = mp.Manager().Queue()
@@ -166,12 +168,15 @@ def run_game_local(
                         target=generate_move_process,
                         args=(gen_move[agent_name], moves_q),
                     )
+                    t0 = time.time()
                     ap.start()
-                    ap.join(MOVE_TIME_MAX)
+                    curr_max_time = 2 * MOVE_TIME_MAX if nth_move < 1 else MOVE_TIME_MAX
+                    ap.join(curr_max_time)
+                    move_time = time.time() - t0
                     if ap.is_alive():
                         ap.terminate()
                         raise AgentFailed(
-                            f"Agent {agent_name} timed out after {MOVE_TIME_MAX} seconds."
+                            f"Agent {agent_name} timed out after {curr_max_time} seconds ({move_time:.1f}s)."
                         )
                     ret = moves_q.get(block=True)
 
@@ -181,7 +186,7 @@ def run_game_local(
                         f"Agent {agent_name} threw an exception:\n {ret[1]}"
                     )
 
-                final_memory, action, state_n = ret[1:]
+                final_memory, move_time, action, state_n = ret[1:]
                 if final_memory > STATE_MEMORY_MAX:
                     raise AgentFailed(
                         f"Agent {agent_name} used {mib(final_memory):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB"
@@ -194,6 +199,7 @@ def run_game_local(
                     )
 
                 results[player].moves.append(action)
+                results[player].move_times.append(move_time)
 
                 if not valid_player_action(game_state, action):
                     raise AgentFailed(
@@ -205,10 +211,22 @@ def run_game_local(
                 states[agent_name] = state_n
                 if not playing:
                     break
+            nth_move += 1
         print(pretty_print_board(game_state))
+        for p_i, result in results.items():
+            mt = result.move_times
+            if len(mt):
+                mean_mt = f"mean: {np.mean(mt):.1f}s"
+                var_mt = f"var: {np.var(mt):.1f}"
+                median_mt = f"median: {np.median(mt):.1f}s"
+                max_mt = f"max: {np.max(mt):.1f}s"
+                print(f"Move times for {get_name(p_i)} -> {median_mt} {mean_mt} {var_mt} {max_mt}")
+
         if end_state == IS_WIN:
             winner = player
-            print(f"Game finished, {get_name(player)} won by playing column {action}.")
+            print(
+                f"Game finished, {get_name(player)} beat {get_name(other_player(player))} by playing column {action}."
+            )
         elif end_state == IS_DRAW:
             winner = NO_PLAYER
             print("Game finished, no winner")
@@ -276,15 +294,18 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     from traceback import StackSummary
     from random import seed as random_seed
     import logging
+    from time import time
 
     seed, board, player, saved_state = moves_q.get()
     np.random.seed(seed)
     random_seed(seed)
     try:
+        t0 = time()
         action, saved_state = generate_move(board, player, saved_state)
+        move_time = time() - t0
         size = get_size(saved_state)
         # print(f'Saved state was {size/2**20:.3f} MB')
-        moves_q.put((STATUS_SUCCESS, size, action, saved_state))
+        moves_q.put((STATUS_SUCCESS, size, move_time, action, saved_state))
 
     except Exception as e:
         logging.exception("An exception was thrown by the agent.")
@@ -296,7 +317,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
         moves_q.put((STATUS_FAILURE, error_msg))
 
 
-def pretty_print_board(board: np.ndarray):
+def pretty_print_board(board: np.ndarray) -> str:
     bs = "|" + "=" * 2 * board.shape[1] + "|\n"
     for i in range(board.shape[0] - 1, -1, -1):
         bs += "|"
@@ -314,6 +335,23 @@ def pretty_print_board(board: np.ndarray):
     bs += "|"
 
     return bs
+
+
+def string_to_board(pp_board: str) -> np.ndarray:
+    board = initialize_game_state()
+    pp_board = pp_board.strip()
+
+    rows = [l for l in pp_board.split("|\n|") if "=" not in l and "0" not in l]
+    assert len(rows) == board.shape[0]
+    for row, l in enumerate(rows[::-1]):
+        cols = len(l) // 2
+        assert cols == board.shape[1]
+        for col, p in enumerate(l[::2]):
+            if p == "O":
+                board[row, col] = PLAYER2
+            elif p == "X":
+                board[row, col] = PLAYER1
+    return board
 
 
 def initialize_game_state() -> np.ndarray:
@@ -345,47 +383,123 @@ def apply_player_action(
 
 
 @nb.njit(cache=True)
-def connected_four(board: np.ndarray, player: BoardPiece) -> bool:
+def connected_four(
+    board: np.ndarray, player: BoardPiece, last_action: Optional[PlayerAction] = None,
+) -> bool:
     rows, cols = PlayerAction(board.shape[0]), PlayerAction(board.shape[1])
 
-    for row in np.arange(rows):
+    if last_action is None:
+        for row in np.arange(rows):
+            for col in np.arange(cols - CONNECT_N + 1):
+                if np.all(board[row, col : col + CONNECT_N] == player):
+                    return True
+
+        for col in np.arange(cols):
+            for row in np.arange(rows - CONNECT_N + 1):
+                if np.all(board[row : row + CONNECT_N, col] == player):
+                    return True
+
+        diagonal = np.empty(CONNECT_N, dtype=board.dtype)
         for col in np.arange(cols - CONNECT_N + 1):
-            if np.all(board[row, col : col + CONNECT_N] == player):
+            for row in np.arange(rows - CONNECT_N + 1):
+                for i in np.arange(PlayerAction(CONNECT_N)):
+                    diagonal[i] = board[row + i, col + i]
+
+                if np.all(diagonal == player):
+                    return True
+
+                for i in np.arange(PlayerAction(CONNECT_N)):
+                    diagonal[i] = board[row + CONNECT_N - (i + 1), col + i]
+
+                if np.all(diagonal == player):
+                    return True
+
+    else:
+        last_col = PlayerAction(last_action)
+        last_row = PlayerAction(0)
+        for row in np.arange(rows):
+            if board[row, last_col] != NO_PLAYER:
+                last_row = PlayerAction(row)
+
+        rows_b = max(last_row - CONNECT_N + 1, 0)
+
+        if last_row >= CONNECT_N - 1 and np.all(
+            board[rows_b : rows_b + CONNECT_N, last_col] == player
+        ):
+            return True
+
+        cols_r = min(last_col + CONNECT_N, cols)
+        cols_l = max(last_col - CONNECT_N + 1, 0)
+
+        for col in np.arange(cols_l, cols_r - CONNECT_N + 1):
+            if np.all(board[last_row, col : col + CONNECT_N] == player):
                 return True
 
-    for col in np.arange(cols):
-        for row in np.arange(rows - CONNECT_N + 1):
-            if np.all(board[row : row + CONNECT_N, col] == player):
-                return True
+        diagonal = np.empty(CONNECT_N, dtype=board.dtype)
 
-    for col in np.arange(cols - CONNECT_N + 1):
-        for row in np.arange(rows - CONNECT_N + 1):
-            found = True
-            for i in np.arange(PlayerAction(CONNECT_N)):
-                if board[row + i, col + i] != player:
-                    found = False
-                    break
-            if found:
-                return True
+        for row, col in zip(
+            np.arange(last_row - CONNECT_N + 1, last_row + 1),
+            np.arange(last_col - CONNECT_N + 1, last_col + 1),
+        ):
+            if 0 <= row <= rows - CONNECT_N and 0 <= col <= cols - CONNECT_N:
+                b = board[row : row + CONNECT_N, col : col + CONNECT_N]
+                for i in np.arange(CONNECT_N):
+                    diagonal[i] = b[i, i]
 
-            found = True
-            for i in np.arange(PlayerAction(CONNECT_N)):
-                if board[row + CONNECT_N - (i + 1), col + i] != player:
-                    found = False
-                    break
-            if found:
-                return True
+                if np.all(diagonal == player):
+                    return True
+
+        for row, col in zip(
+            np.arange(last_row + CONNECT_N, last_row - 1, -1),
+            np.arange(last_col - CONNECT_N + 1, last_col + 1),
+        ):
+            if CONNECT_N <= row <= rows and 0 <= col <= cols - CONNECT_N:
+                b = board[row - CONNECT_N : row, col : col + CONNECT_N]
+                for i in np.arange(CONNECT_N):
+                    diagonal[i] = b[CONNECT_N - (i + 1), i]
+
+                if np.all(diagonal == player):
+                    return True
+
+    # else:
+    #
+    #     for row in np.arange(rows):
+    #         for col in np.arange(cols - CONNECT_N + 1):
+    #             if np.all(board[row, col : col + CONNECT_N] == player):
+    #                 return True
+    #
+    #     for col in np.arange(cols):
+    #         for row in np.arange(rows - CONNECT_N + 1):
+    #             if np.all(board[row : row + CONNECT_N, col] == player):
+    #                 return True
+    #
+    #     diagonal = np.empty(CONNECT_N, dtype=board.dtype)
+    #     for col in np.arange(cols - CONNECT_N + 1):
+    #         for row in np.arange(rows - CONNECT_N + 1):
+    #             for i in np.arange(PlayerAction(CONNECT_N)):
+    #                 diagonal[i] = board[row + i, col + i]
+    #
+    #             if np.all(diagonal == player):
+    #                 return True
+    #
+    #             for i in np.arange(PlayerAction(CONNECT_N)):
+    #                 diagonal[i] = board[row + CONNECT_N - (i + 1), col + i]
+    #
+    #             if np.all(diagonal == player):
+    #                 return True
 
     return False
 
 
 @nb.njit(cache=True)
-def check_end_state(board: np.ndarray, player: BoardPiece) -> BoardValue:
+def check_end_state(
+    board: np.ndarray, player: BoardPiece, last_action: Optional[PlayerAction] = None,
+) -> BoardValue:
     """
     :param board:
     :return: 1 if winning state, 0 if still playing, -1 if board is full
     """
-    if connected_four(board, player):
+    if connected_four(board, player, last_action):
         return IS_WIN
     if np.sum(board == NO_PLAYER) == 0:
         return IS_DRAW

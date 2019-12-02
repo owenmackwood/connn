@@ -1,0 +1,6 @@
+[submodule "connectn/agents/agent_mmab"]
+	path = connectn/agents/agent_mmab
+	url = git@gitlab.tubit.tu-berlin.de:mackwood/agent_mmab.git
+[submodule "connectn/agents/agent_mcts"]
+	path = connectn/agents/agent_mcts
+	url = git@gitlab.tubit.tu-berlin.de:mackwood/agent_mcts.git

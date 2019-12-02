@@ -190,6 +190,18 @@ def add_game_for_agent(agent_name: str, game_result: GameResult):
     ga = f.create_carray(gg, "moves", tables.Atom.from_dtype(moves.dtype), moves.shape)
     ga[...] = moves[...]
 
+    mt_1 = np.array(result_1.move_times)
+    mt_2 = np.array(result_2.move_times)
+    max_mt = max(mt_1.size, mt_2.size)
+    mts = np.empty((max_mt, 2), dtype=mt_1.dtype)
+    mts.fill(-1)
+    mts[: mt_1.size, 0] = mt_1
+    mts[: mt_2.size, 1] = mt_2
+
+    ga = f.create_carray(gg, "move_times", tables.Atom.from_dtype(mts.dtype), mts.shape)
+    ga[...] = mts[...]
+
+
     if moved_first:
         stderr = result_1.stderr
         stdout = result_1.stdout

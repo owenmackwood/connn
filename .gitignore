@@ -1,4 +1,5 @@
-connectn/agents/agent_mcts*
+connectn/agents/agent_mctsh
+connectn/agents/agent_mctsr
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -118,6 +119,9 @@ venv.bak/
 
 # Rope project settings
 .ropeproject
+
+# Pycharm
+.idea
 
 # mkdocs documentation
 /site

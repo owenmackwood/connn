@@ -75,6 +75,53 @@ def test_check_end_state_diagonal(empty_board: np.ndarray):
                             assert check_end_state(b0, player) == STILL_PLAYING
 
 
+def test_connected_four_last_action(empty_board: np.ndarray):
+    from connectn.game import connected_four, other_player
+
+    for player in (PLAYER1, PLAYER2):
+        for i in range(CONNECT_N):
+            for row in range(empty_board.shape[0]):
+                for col in range(empty_board.shape[1] - CONNECT_N + i + 1):
+                    b0 = empty_board.copy()
+                    b0[row, col : col + CONNECT_N - i] = player
+                    for last_action in np.arange(empty_board.shape[1]):
+                        if i == 0 and col <= last_action < col + CONNECT_N:
+                            assert connected_four(b0, player, last_action)
+                        else:
+                            assert not connected_four(b0, player, last_action)
+
+            for col in range(empty_board.shape[1]):
+                for row in range(empty_board.shape[0] - CONNECT_N + i + 1):
+                    b0 = empty_board.copy()
+                    b0[:row, col] = other_player(player)
+                    b0[row : row + CONNECT_N - i, col] = player
+                    for last_action in np.arange(empty_board.shape[1]):
+                        if i == 0 and last_action == col:
+                            assert connected_four(b0, player, last_action)
+                        else:
+                            assert not connected_four(b0, player, last_action)
+
+            n_diagonal = player * np.diag(
+                np.ones(CONNECT_N - i, dtype=empty_board.dtype)
+            )
+            for n_conn in (n_diagonal, n_diagonal[:, ::-1]):
+                for row in range(empty_board.shape[0] - CONNECT_N + i + 1):
+                    for col in range(empty_board.shape[1] - CONNECT_N + i + 1):
+                        b0 = empty_board.copy()
+                        b0[
+                            row : row + CONNECT_N - i, col : col + CONNECT_N - i
+                        ] = n_conn
+                        for last_action in np.arange(empty_board.shape[1]):
+                            if i == 0 and col <= last_action < col + CONNECT_N:
+                                assert connected_four(b0, player, last_action)
+                            else:
+                                assert not connected_four(b0, player, last_action)
+                        # if i == 0:
+                        #     assert connected_four(b0, player)
+                        # else:
+                        #     assert not connected_four(b0, player)
+
+
 def test_other_player():
     from connectn.game import other_player
 
@@ -95,8 +142,8 @@ def test_generate_move_process(empty_board: np.ndarray):
     q.put((seed, empty_board, PLAYER1, init_state))
     generate_move_process(lambda board, player, saved_state: (a, saved_state), q)
     ret = q.get()
-    assert len(ret) == 4
-    status, size, action, returned_state = ret
+    assert len(ret) == 5
+    status, size, move_time, action, returned_state = ret
     assert status == STATUS_SUCCESS
     assert action == a
     assert returned_state.test == init_state.test
