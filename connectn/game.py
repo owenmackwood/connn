@@ -3,8 +3,8 @@ import multiprocessing as mp
 import numpy as np
 import traceback
 import logging
-from typing import List, Tuple, Optional
-from connectn.utils import GenMove, nb, mib
+from typing import List, Union, Optional
+from connectn.utils import GenMove, nb, mib, SavedState
 from connectn.users import import_agents, agents
 from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
 from connectn.utils import IS_DEBUGGING
@@ -23,23 +23,19 @@ NO_PLAYER = BoardPiece(0)
 PLAYER1 = BoardPiece(1)
 PLAYER2 = BoardPiece(2)
 
-STATUS_SUCCESS = 0
-STATUS_FAILURE = 1
-
 
 class AgentFailed(Exception):
     pass
 
 
 class AgentResult:
-    def __init__(
-        self, agent_name: str, moves: List[int], stdout: str = "", stderr: str = ""
-    ):
+    def __init__(self, agent_name: str):
         self.name: str = agent_name
-        self.moves: List[int] = moves
+        self.moves: List[PlayerAction] = []
         self.move_times: List[float] = []
-        self.stdout: str = stdout
-        self.stderr: str = stderr
+        self.state_size: List[int] = []
+        self.stdout: List[str] = []
+        self.stderr: List[str] = []
         self.outcome: str = "NONE"
 
 
@@ -50,6 +46,42 @@ class GameResult:
         self.winner: BoardPiece = NO_PLAYER
         self.time_sec: float = time.time()
         self.time_str: str = time.ctime()
+
+
+class GenMoveArgs:
+    def __init__(
+        self,
+        seed: Union[int, None],
+        board: np.ndarray,
+        player: BoardPiece,
+        state: Optional[SavedState],
+    ):
+        self.seed = seed
+        self.board = board
+        self.player = player
+        self.state = state
+
+
+class GenMoveResult:
+    def __init__(self, stdout: str, stderr: str):
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class GenMoveSuccess(GenMoveResult):
+    def __init__(
+        self, stdout: str, stderr: str, move_time: float, action: int, state: SavedState
+    ):
+        super().__init__(stdout, stderr)
+        self.move_time = move_time
+        self.action = action
+        self.state = state
+
+
+class GenMoveFailure(GenMoveResult):
+    def __init__(self, stdout: str, stderr: str, error_msg: str):
+        super().__init__(stdout, stderr)
+        self.error_msg = error_msg
 
 
 def run_games(q: mp.Queue, play_all: bool = True):
@@ -115,6 +147,7 @@ def run_game_local(
     """
     Likely has to be replaced by separate function runnable via the GridEngine
     """
+    from connectn.utils import get_size
     import matplotlib.pyplot as plt
 
     agent_modules = import_agents({})
@@ -127,7 +160,7 @@ def run_game_local(
 
     winner = player = NO_PLAYER
     agent_name = agent_1
-    results = {PLAYER1: AgentResult(agent_1, []), PLAYER2: AgentResult(agent_2, [])}
+    results = {PLAYER1: AgentResult(agent_1), PLAYER2: AgentResult(agent_2)}
     gr = GameResult(results[PLAYER1], results[PLAYER2])
 
     gen_move = {}
@@ -135,9 +168,9 @@ def run_game_local(
         try:
             gen_move[agent_name] = agent_modules[agent_name].generate_move
         except AttributeError:
-            results[
-                player
-            ].stderr += "\nYou did not define generate_move at the package level"
+            results[player].stderr.append(
+                "\nYou did not define generate_move at the package level"
+            )
             gr.winner = other_player(player)
             results[player].outcome = "FAIL"
             results[gr.winner].outcome = "WIN"
@@ -159,10 +192,10 @@ def run_game_local(
         playing = True
         while playing:
             for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
-                moves_q.put((seed, game_state.copy(), player, states[agent_name]))
+                gma = GenMoveArgs(seed, game_state.copy(), player, states[agent_name])
+                moves_q.put(gma)
                 if IS_DEBUGGING:
                     generate_move_process(gen_move[agent_name], moves_q)
-                    ret = moves_q.get()
                 else:
                     ap = mp.Process(
                         target=generate_move_process,
@@ -175,40 +208,44 @@ def run_game_local(
                     move_time = time.time() - t0
                     if ap.is_alive():
                         ap.terminate()
-                        raise AgentFailed(
-                            f"Agent {agent_name} timed out after {curr_max_time} seconds ({move_time:.1f}s)."
-                        )
-                    ret = moves_q.get(block=True)
+                        msg = f"Agent {agent_name} timed out after {curr_max_time} seconds ({move_time:.1f}s)."
+                        raise AgentFailed(msg)
 
-                status = ret[0]
-                if status != STATUS_SUCCESS:
-                    raise AgentFailed(
-                        f"Agent {agent_name} threw an exception:\n {ret[1]}"
-                    )
+                ret: Union[GenMoveSuccess, GenMoveFailure] = moves_q.get(block=True)
 
-                final_memory, move_time, action, state_n = ret[1:]
-                if final_memory > STATE_MEMORY_MAX:
-                    raise AgentFailed(
-                        f"Agent {agent_name} used {mib(final_memory):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB"
-                    )
-                elif not isinstance(
-                    action, (int, np.int8, np.int16, np.int32, np.int64)
-                ):
-                    raise AgentFailed(
-                        f"Agent {agent_name} returned an invalid type of action {type(action)}"
-                    )
+                results[player].stdout.append(ret.stdout)
+                results[player].stderr.append(ret.stderr)
 
+                if isinstance(ret, GenMoveFailure):
+                    error_msg = ret.error_msg
+                    msg = f"Agent {agent_name} threw an exception:\n {error_msg}"
+                    raise AgentFailed(msg)
+
+                assert isinstance(ret, GenMoveSuccess)
+                action = ret.action
+                state_size = get_size(ret.state)
+
+                results[player].move_times.append(ret.move_time)
+                results[player].state_size.append(state_size)
+
+                if state_size > STATE_MEMORY_MAX:
+                    msg = f"Agent {agent_name} used {mib(state_size):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB"
+                    raise AgentFailed(msg)
+
+                if not np.issubdtype(action, np.integer):
+                    msg = f"Agent {agent_name} returned an invalid type of action {type(action)}"
+                    raise AgentFailed(msg)
+
+                action = PlayerAction(action)
                 results[player].moves.append(action)
-                results[player].move_times.append(move_time)
-
                 if not valid_player_action(game_state, action):
-                    raise AgentFailed(
-                        f"Agent {agent_name} returned an invalid action {action}"
-                    )
-                apply_player_action(game_state, PlayerAction(action), player)
+                    msg = f"Agent {agent_name} returned an invalid action {action}"
+                    raise AgentFailed(msg)
+
+                apply_player_action(game_state, action, player)
                 end_state = check_end_state(game_state, player)
                 playing = end_state == STILL_PLAYING
-                states[agent_name] = state_n
+                states[agent_name] = ret.state
                 if not playing:
                     break
             nth_move += 1
@@ -220,7 +257,9 @@ def run_game_local(
                 var_mt = f"var: {np.var(mt):.1f}"
                 median_mt = f"median: {np.median(mt):.1f}s"
                 max_mt = f"max: {np.max(mt):.1f}s"
-                print(f"Move times for {get_name(p_i)} -> {median_mt} {mean_mt} {var_mt} {max_mt}")
+                print(
+                    f"Move times for {get_name(p_i)} -> {median_mt} {mean_mt} {var_mt} {max_mt}"
+                )
 
         if end_state == IS_WIN:
             winner = player
@@ -238,7 +277,7 @@ def run_game_local(
         print(f"Agent failed: {agent_name}")
         print(err)
         winner = other_player(player)
-        results[player].stderr += str(err)
+        results[player].stderr.append(str(err))
         LOSER_RESULT = "FAIL"
 
     # fig = plt.figure()
@@ -290,31 +329,37 @@ def run_game_local(
 
 
 def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
-    from connectn.utils import get_size
     from traceback import StackSummary
     from random import seed as random_seed
     import logging
+    import io
     from time import time
+    from contextlib import redirect_stderr, redirect_stdout
 
-    seed, board, player, saved_state = moves_q.get()
-    np.random.seed(seed)
-    random_seed(seed)
+    f_stderr, f_stdout = io.StringIO(), io.StringIO()
+
+    gma: GenMoveArgs = moves_q.get()
+    np.random.seed(gma.seed)
+    random_seed(gma.seed)
+
+    result = None
     try:
-        t0 = time()
-        action, saved_state = generate_move(board, player, saved_state)
-        move_time = time() - t0
-        size = get_size(saved_state)
-        # print(f'Saved state was {size/2**20:.3f} MB')
-        moves_q.put((STATUS_SUCCESS, size, move_time, action, saved_state))
-
+        with redirect_stdout(f_stdout), redirect_stderr(f_stderr):
+            t0 = time()
+            action, saved_state = generate_move(gma.board, gma.player, gma.state)
+            move_time = time() - t0
+        stdout, stderr = f_stdout.getvalue(), f_stderr.getvalue()
+        result = GenMoveSuccess(stdout, stderr, move_time, action, saved_state)
     except Exception as e:
         logging.exception("An exception was thrown by the agent.")
         error_msg = repr(e) + "\n"
         extracted_list = traceback.extract_tb(e.__traceback__)
         for item in StackSummary.from_list(extracted_list).format():
             error_msg += str(item)
-
-        moves_q.put((STATUS_FAILURE, error_msg))
+        stdout, stderr = f_stdout.getvalue(), f_stderr.getvalue()
+        result = GenMoveFailure(stdout, stderr, error_msg)
+    finally:
+        moves_q.put(result)
 
 
 def pretty_print_board(board: np.ndarray) -> str:

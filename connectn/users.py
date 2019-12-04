@@ -22,8 +22,8 @@ def agents() -> List[str]:
         "agent_random",
         "agent_columns",
         "agent_rows",
-        "agent_mcts",
-        "agent_mmab",
+        # "agent_mcts",
+        # "agent_mmab",
         "agent_fail",
     ]
     agent_names = builtin_agents + list(load_user_auth().keys())
@@ -98,4 +98,4 @@ def generate_users(num_users: int, pw_length: int = 8, append: bool = True):
 
 
 if __name__ == "__main__":
-    generate_users(1, append=False)
+    generate_users(6, append=False)

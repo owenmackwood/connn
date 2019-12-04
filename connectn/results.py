@@ -5,10 +5,11 @@ import numpy as np
 from tables import IsDescription, Int32Col, StringCol, Float64Col, BoolCol
 from connectn.utils import DATA_DIR
 from connectn.game import GameResult
-from typing import Iterable
+from typing import Iterable, List
 
 RESULTS_FILE_PATH = DATA_DIR / "results.h5"
 name_size = 32
+compression_filter = tables.Filters(complevel=5, complib="zlib")
 
 """
 agents
@@ -146,6 +147,8 @@ def add_game(game_result: GameResult):
 
 
 def add_game_for_agent(agent_name: str, game_result: GameResult):
+    from tables import VLStringAtom
+
     fp = agent_games_file_path(agent_name)
     version = get_agent_version(agent_name)
     f = tables.open_file(str(fp), "w" if not fp.exists() else "a")
@@ -187,7 +190,13 @@ def add_game_for_agent(agent_name: str, game_result: GameResult):
     moves[: moves_1.size, 0] = moves_1
     moves[: moves_2.size, 1] = moves_2
 
-    ga = f.create_carray(gg, "moves", tables.Atom.from_dtype(moves.dtype), moves.shape)
+    ga = f.create_carray(
+        gg,
+        "moves",
+        tables.Atom.from_dtype(moves.dtype),
+        moves.shape,
+        filters=compression_filter,
+    )
     ga[...] = moves[...]
 
     mt_1 = np.array(result_1.move_times)
@@ -198,23 +207,43 @@ def add_game_for_agent(agent_name: str, game_result: GameResult):
     mts[: mt_1.size, 0] = mt_1
     mts[: mt_2.size, 1] = mt_2
 
-    ga = f.create_carray(gg, "move_times", tables.Atom.from_dtype(mts.dtype), mts.shape)
+    ga = f.create_carray(
+        gg,
+        "move_times",
+        tables.Atom.from_dtype(mts.dtype),
+        mts.shape,
+        filters=compression_filter,
+    )
     ga[...] = mts[...]
 
-
     if moved_first:
-        stderr = result_1.stderr
-        stdout = result_1.stdout
+        stderr: List[str] = result_1.stderr
+        stdout: List[str] = result_1.stdout
     else:
-        stderr = result_2.stderr
-        stdout = result_2.stdout
+        stderr: List[str] = result_2.stderr
+        stdout: List[str] = result_2.stdout
 
-    f.create_array(gg, "stderr", stderr.encode("utf-8"))
-    f.create_array(gg, "stdout", stdout.encode("utf-8"))
+    vla = f.create_vlarray(
+        gg,
+        "stderr",
+        atom=VLStringAtom(),
+        filters=compression_filter,
+        expectedrows=len(stderr),
+    )
+    for s in stderr:
+        vla.append(s.encode("utf-8"))
+    vla = f.create_vlarray(
+        gg,
+        "stdout",
+        atom=VLStringAtom(),
+        filters=compression_filter,
+        expectedrows=len(stdout),
+    )
+    for s in stdout:
+        vla.append(s.encode("utf-8"))
 
     f.flush()
     f.close()
-    # agent_1, agent_2, outcome, moves_1, moves_2
 
 
 def initialize(agent_names: Iterable[str]):

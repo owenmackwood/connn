@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-LISTEN_PORT = 2342
+LISTEN_PORT = 2323
 ARCHIVE_FORMAT = "tar"
 DATA_DIR: Path = Path.home() / "ppp_results"
 KEY_SALT_FILE: Path = DATA_DIR / "keys_salts"
@@ -16,8 +16,8 @@ STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
 ON_CLUSTER = False
 IS_DEBUGGING = sys.gettrace() is not None
 
-# if IS_DEBUGGING:
-#     os.environ["NUMBA_DISABLE_JIT"] = "1"
+if IS_DEBUGGING:
+    os.environ["NUMBA_DISABLE_JIT"] = "1"
 # os.environ["NUMBA_PARALLEL_DIAGNOSTICS"] = "4"
 import numba as nb
 
@@ -61,10 +61,7 @@ class ComfyStockings(Stockings.Stocking):
         raise InactiveSocket("Socket became inactive while waiting for reply")
 
 
-nb.njit(cache=True)
-
-
-def get_size(obj, seen=None):
+def get_size(obj, seen=None) -> int:
     """Recursively finds size of objects in bytes"""
     import inspect
 
