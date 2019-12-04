@@ -339,7 +339,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     f_stderr, f_stdout = io.StringIO(), io.StringIO()
 
     gma: GenMoveArgs = moves_q.get()
-    np.random.seed(gma.seed)
+    np.random.seed(gma.seed) # TODO generate new randint at beginning of every move
     random_seed(gma.seed)
 
     result = None
@@ -569,7 +569,7 @@ def human_vs_agent(generate_move: GenMove):
         while playing:
             gen_moves = (generate_move, user_move)[::play_first]
             for player, gen_move in zip((PLAYER1, PLAYER2), gen_moves):
-                action, saved_state = gen_move(board, player, saved_state)
+                action, saved_state = gen_move(board.copy(), player, saved_state)
                 apply_player_action(board, action, player)
                 end_state = check_end_state(board, player)
                 if end_state != STILL_PLAYING:
