@@ -142,13 +142,15 @@ def run_game_cluster(agent_1: str, agent_2: str):
 
 
 def run_game_local(
-    agent_1: str, agent_2: str, seed: Optional[int] = None
+    agent_1: str, agent_2: str, game_seed: Optional[int] = None
 ) -> GameResult:
     """
     Likely has to be replaced by separate function runnable via the GridEngine
     """
-    from connectn.utils import get_size
     import matplotlib.pyplot as plt
+    from connectn.utils import get_size
+
+    rs = np.random.RandomState(game_seed)
 
     agent_modules = import_agents({})
     agent_names = (agent_1, agent_2)
@@ -192,7 +194,8 @@ def run_game_local(
         playing = True
         while playing:
             for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
-                gma = GenMoveArgs(seed, game_state.copy(), player, states[agent_name])
+                move_seed = rs.randint(2**32, size=1)[0]
+                gma = GenMoveArgs(move_seed, game_state.copy(), player, states[agent_name])
                 moves_q.put(gma)
                 if IS_DEBUGGING:
                     generate_move_process(gen_move[agent_name], moves_q)
