@@ -1,5 +1,6 @@
 connectn/agents/agent_mctsh
 connectn/agents/agent_mctsr
+connectn/agents/group_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
