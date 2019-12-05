@@ -100,12 +100,12 @@ def add_game(game_result: GameResult) -> None:
         __check_for_agent(results_file, name_1)
         __check_for_agent(results_file, name_2)
 
+        version_1 = __get_current_agent_version(results_file, name_1)
+        version_2 = __get_current_agent_version(results_file, name_2)
         if __record_games_for_agent(name_1):
-            agent_version = __get_current_agent_version(results_file, name_1)
-            __add_game_for_agent(name_1, agent_version, game_result)
+            __add_game_for_agent(name_1, version_1, version_2, game_result)
         if __record_games_for_agent(name_2):
-            agent_version = __get_current_agent_version(results_file, name_2)
-            __add_game_for_agent(name_2, agent_version, game_result)
+            __add_game_for_agent(name_2, version_2, version_1, game_result)
 
         __record_outcome(results_file, game_result)
 
@@ -200,7 +200,7 @@ def __record_games_for_agent(agent_name: str) -> bool:
 
 
 def __add_game_for_agent(
-    agent_name: str, agent_version: int, game_result: GameResult
+    agent_name: str, agent_version: int, opponent_version: int, game_result: GameResult
 ) -> None:
 
     fp = __agent_games_file_path(agent_name)
@@ -224,7 +224,7 @@ def __add_game_for_agent(
         gt_row = gt.row
         gt_row["game_number"] = game_number
         gt_row["opponent"] = opponent_name
-        gt_row["version"] = get_current_agent_version(opponent_name)
+        gt_row["version"] = opponent_version
         gt_row["moved_first"] = moved_first
         gt_row["outcome"] = result_1.outcome if moved_first else result_2.outcome
         gt_row["when/time_str"] = game_result.time_str
