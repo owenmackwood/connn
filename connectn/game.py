@@ -34,6 +34,7 @@ class AgentResult:
         self.moves: List[PlayerAction] = []
         self.move_times: List[float] = []
         self.state_size: List[int] = []
+        self.seeds: List[int] = []
         self.stdout: List[str] = []
         self.stderr: List[str] = []
         self.outcome: str = "NONE"
@@ -194,7 +195,9 @@ def run_game_local(
         playing = True
         while playing:
             for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
-                move_seed = rs.randint(2**32, size=1)[0]
+                move_seed = rs.randint(2**32)
+                results[player].seeds.append(move_seed)
+
                 gma = GenMoveArgs(move_seed, game_state.copy(), player, states[agent_name])
                 moves_q.put(gma)
                 if IS_DEBUGGING:
@@ -342,7 +345,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     f_stderr, f_stdout = io.StringIO(), io.StringIO()
 
     gma: GenMoveArgs = moves_q.get()
-    np.random.seed(gma.seed) # TODO generate new randint at beginning of every move
+    np.random.seed(gma.seed)
     random_seed(gma.seed)
 
     result = None
