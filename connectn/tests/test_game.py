@@ -132,31 +132,37 @@ def test_other_player():
 def test_generate_move_process(empty_board: np.ndarray):
     from multiprocessing import Queue
     from connectn.utils import SavedState
-    from connectn.game import generate_move_process, STATUS_SUCCESS, STATUS_FAILURE
+    from connectn.game import (
+        generate_move_process,
+        GenMoveSuccess,
+        GenMoveFailure,
+        GenMoveArgs,
+    )
 
     q = Queue()
     seed = None
     a = 6543
     init_state = SavedState()
     init_state.test = 9876
-    q.put((seed, empty_board, PLAYER1, init_state))
+    gma = GenMoveArgs(seed, empty_board, PLAYER1, init_state)
+    q.put(gma)
     generate_move_process(lambda board, player, saved_state: (a, saved_state), q)
-    ret = q.get()
-    assert len(ret) == 5
-    status, size, move_time, action, returned_state = ret
-    assert status == STATUS_SUCCESS
+    ret: GenMoveSuccess = q.get()
+
+    returned_state = ret.state
+    action = ret.action
+
     assert action == a
     assert returned_state.test == init_state.test
 
     def fail_move(board, player, saved_state):
         raise Exception("Test failure")
 
-    q.put((seed, empty_board, PLAYER1, init_state))
+    gma = GenMoveArgs(seed, empty_board, PLAYER1, init_state)
+    q.put(gma)
     generate_move_process(fail_move, q)
-    ret = q.get()
-    assert len(ret) == 2
-    status, error_msg = ret
-    assert status == STATUS_FAILURE
+    ret: GenMoveFailure = q.get()
+    error_msg = ret.error_msg
     assert error_msg.startswith("Exception('Test failure')")
     assert error_msg.endswith('raise Exception("Test failure")\n')
 
@@ -183,9 +189,10 @@ def test_run_game_local():
 
     seed = 0
     gr = run_game_local("agent_columns", "agent_rows", seed)
-    assert gr.winner == PLAYER1
-    assert gr.result_1.outcome == "WIN" and gr.result_2.outcome == "LOSS"
-    assert gr.result_1.moves == 4 * [4] and gr.result_2.moves == [0, 1, 2]
+    assert gr.winner == PLAYER2
+    assert gr.result_2.outcome == "WIN" and gr.result_1.outcome == "LOSS"
+    assert gr.result_1.moves == [2, 2, 2, 2, 2, 3, 3]
+    assert gr.result_2.moves == [0, 1, 2, 3, 4, 5, 6]
     assert gr.result_1.name == "agent_columns" and gr.result_2.name == "agent_rows"
 
 
@@ -231,7 +238,7 @@ def test_run_games(monkeypatch):
         assert agent_1 in agent_names or agent_2 in agent_names
         assert agent_1 != agent_2
         assert agent_1 in all_agents and agent_2 in all_agents
-        return GameResult(AgentResult(agent_1, []), AgentResult(agent_2, []))
+        return GameResult(AgentResult(agent_1), AgentResult(agent_2))
 
     q = Queue()
     updated_agents_a = [("agent_rows", "no file")]

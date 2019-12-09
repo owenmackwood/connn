@@ -14,12 +14,6 @@ KEY_SALT_FILE: Path = DATA_DIR / "keys_salts"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
 ON_CLUSTER = False
-IS_DEBUGGING = sys.gettrace() is not None
-
-if IS_DEBUGGING:
-    os.environ["NUMBA_DISABLE_JIT"] = "1"
-# os.environ["NUMBA_PARALLEL_DIAGNOSTICS"] = "4"
-import numba as nb
 
 
 class SavedState:

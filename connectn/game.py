@@ -4,10 +4,11 @@ import numpy as np
 import traceback
 import logging
 from typing import List, Union, Optional
-from connectn.utils import GenMove, nb, mib, SavedState
+from connectn.utils import GenMove, mib, SavedState
 from connectn.users import import_agents, agents
 from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
-from connectn.utils import IS_DEBUGGING
+from connectn import IS_DEBUGGING
+import numba as nb
 
 CONNECT_N = np.int8(4)
 
@@ -91,8 +92,8 @@ def run_games(q: mp.Queue, play_all: bool = True):
     from connectn.utils import update_user_agent_code
     import connectn.results as results
 
-    REPETITIONS = 1
-    RUN_ALL_AFTER = 60 * 60  # Run all-against-all every 60 minutes
+    repetitions = 1
+    run_all_after = 60 * 60  # Run all-against-all every 60 minutes
 
     agent_modules = import_agents({})
     results.initialize(agent_modules.keys())
@@ -105,7 +106,7 @@ def run_games(q: mp.Queue, play_all: bool = True):
             # Check the message queue for updated agents
             print("Game-playing process entering queue to wait for new agents")
             try:
-                q_data = q.get(block=True, timeout=RUN_ALL_AFTER)
+                q_data = q.get(block=True, timeout=run_all_after)
             except EmptyQueue:
                 updated_agents = list(agents())
                 print("Timed out waiting for new agents, running all-against-all.")
@@ -127,12 +128,12 @@ def run_games(q: mp.Queue, play_all: bool = True):
             if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
         ]
 
-        print(f"About to play {len(to_play)*REPETITIONS} games.")
-        for g in REPETITIONS * to_play:
+        print(f"About to play {len(to_play)*repetitions} games.")
+        for g in repetitions * to_play:
             try:
                 game_result = run_game(*g)
                 results.add_game(game_result)
-            except:
+            except Exception:
                 logging.exception("This should not happen, unless we are testing")
         print("Finished game-play round.")
 
@@ -148,7 +149,6 @@ def run_game_local(
     """
     Likely has to be replaced by separate function runnable via the GridEngine
     """
-    import matplotlib.pyplot as plt
     from connectn.utils import get_size
 
     rs = np.random.RandomState(game_seed)
@@ -169,7 +169,7 @@ def run_game_local(
     gen_move = {}
     for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
         try:
-            gen_move[agent_name] = agent_modules[agent_name].generate_move
+            gen_move[agent_name]: GenMove = getattr(agent_modules[agent_name], "generate_move")
         except AttributeError:
             results[player].stderr.append(
                 "\nYou did not define generate_move at the package level"
@@ -184,7 +184,7 @@ def run_game_local(
             logging.exception("Something has gone terribly wrong")
             raise e
 
-    LOSER_RESULT = "LOSS"
+    loser_result = "LOSS"
     game_state = initialize_game_state()
     nth_move = 0
     try:
@@ -193,6 +193,7 @@ def run_game_local(
 
         end_state = STILL_PLAYING
         playing = True
+        action = PlayerAction(0)
         while playing:
             for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
                 move_seed = rs.randint(2**32)
@@ -284,7 +285,7 @@ def run_game_local(
         print(err)
         winner = other_player(player)
         results[player].stderr.append(str(err))
-        LOSER_RESULT = "FAIL"
+        loser_result = "FAIL"
 
     # fig = plt.figure()
     # fig.suptitle('Odds of win')
@@ -323,14 +324,17 @@ def run_game_local(
     # plt.show()
 
     # for i, (agent, saved_state) in enumerate(states.items()):
-    #     print(f'TIME {agent} mu:{np.mean(saved_state.time):.2f}, med:{np.median(saved_state.time):.2f}, max:{np.max(saved_state.time):.2f}')
+    #     print(
+    #     f'TIME {agent} mu:{np.mean(saved_state.time):.2f},
+    #     med:{np.median(saved_state.time):.2f}, max:{np.max(saved_state.time):.2f}'
+    #     )
 
     gr.winner = winner
     if winner == NO_PLAYER:
         results[PLAYER1].outcome = results[PLAYER2].outcome = "DRAW"
     else:
         results[PLAYER1 if winner == PLAYER1 else PLAYER2].outcome = "WIN"
-        results[PLAYER2 if winner == PLAYER1 else PLAYER1].outcome = LOSER_RESULT
+        results[PLAYER2 if winner == PLAYER1 else PLAYER1].outcome = loser_result
     return gr
 
 
@@ -392,7 +396,7 @@ def string_to_board(pp_board: str) -> np.ndarray:
     board = initialize_game_state()
     pp_board = pp_board.strip()
 
-    rows = [l for l in pp_board.split("|\n|") if "=" not in l and "0" not in l]
+    rows = [ln for ln in pp_board.split("|\n|") if "=" not in ln and "0" not in ln]
     assert len(rows) == board.shape[0]
     for row, l in enumerate(rows[::-1]):
         cols = len(l) // 2
@@ -547,8 +551,17 @@ def check_end_state(
     board: np.ndarray, player: BoardPiece, last_action: Optional[PlayerAction] = None,
 ) -> BoardValue:
     """
-    :param board:
-    :return: 1 if winning state, 0 if still playing, -1 if board is full
+
+    Parameters
+    ----------
+    board : ndarray
+    player : BoardPiece
+    last_action : PlayerAction, optional
+
+    Returns
+    -------
+    BoardValue
+
     """
     if connected_four(board, player, last_action):
         return IS_WIN
