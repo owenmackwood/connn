@@ -2,6 +2,7 @@ from pathlib import Path
 import time
 import tables
 import numpy as np
+import logging
 from tables import IsDescription, Int32Col, StringCol, Float64Col, BoolCol
 from connectn.utils import DATA_DIR
 from connectn.game import GameResult
@@ -212,7 +213,7 @@ def get_game_numbers_for_agent_version(
                 gt: tables.Table = agent_file.get_node(vg, "games")
                 game_numbers += gt.col("game_number").tolist()
             except tables.NoSuchNodeError:
-                print(
+                logging.info(
                     f"No record of games for {agent_name} for version {agent_version}"
                 )
     return game_numbers
@@ -248,6 +249,7 @@ def get_game_for_agent(
                 moves: ndarray of PlayerAction
                 move_times: ndarray of float
                 state_size: ndarray of int
+                seeds: ndarray of int
                 stdout: list of str
                 stderr: list of str
     """
@@ -267,32 +269,37 @@ def get_game_for_agent(
 
         found = False
         for gt_row in gt.where(f"(game_number == {game_number})"):
-            assert (
-                not found
-            ), f"Found two entries for {agent_name} version {agent_version}, game number {game_number}"
+            msg = f"Found two entries for {agent_name} version {agent_version}, game number {game_number}"
+            assert not found, msg
+            found = True
             for k in game_result_cols:
                 game_info[k] = decode(gt_row[k])
-            found = True
 
-        gg = agent_file.get_node(vg, _game_string(game_number))
-        for n in ("moves", "move_times", "state_size"):
-            try:
-                game_info[n] = agent_file.get_node(gg, n).read()
-            except tables.NoSuchNodeError:
-                msg = f"{n} not found for {agent_name}, version {agent_version}, game {game_number}"
-                print(msg)
-
-        game_info["stdout"] = []
-        game_info["stderr"] = []
+        if not found:
+            msg = f"Game {game_number} for {agent_name} version {agent_version} was not found in the games table."
+            logging.error(msg)
 
         try:
-            for stdout in gg.stdout:
-                game_info["stdout"].append(stdout.decode())
-            for stderr in gg.stderr:
-                game_info["stderr"].append(stderr.decode())
-        except tables.NoSuchNodeError as e:
-            msg = f"{e!r} for {agent_name}, version {agent_version}, game {game_number}"
-            print(msg)
+            gg: tables.Group = agent_file.get_node(vg, _game_string(game_number))
+        except tables.NoSuchNodeError:
+            msg = f"No complete record of game {game_number} for {agent_name} version {agent_version} exists."
+            logging.error(msg)
+        else:
+            for n in ("moves", "move_times", "state_size", "seeds"):
+                try:
+                    game_info[n] = agent_file.get_node(gg, n).read()
+                except tables.NoSuchNodeError:
+                    msg = f"{n} not found for {agent_name}, version {agent_version}, game {game_number}"
+                    logging.error(msg)
+
+            for n in ("stdout", "stderr"):
+                game_info[n] = []
+                try:
+                    for std_ in agent_file.get_node(gg, n):
+                        game_info[n].append(std_.decode())
+                except tables.NoSuchNodeError:
+                    msg = f"{n} not found for {agent_name}, version {agent_version}, game {game_number}"
+                    logging.error(msg)
 
     return game_info
 
@@ -390,6 +397,7 @@ def _add_game_for_agent(
             _add_array(agent_file, gg, n, getattr(result_1, n), getattr(result_2, n))
 
         _add_array(agent_file, gg, "state_size", result_agent.state_size)
+        _add_array(agent_file, gg, "seeds", result_agent.seeds)
 
         for n in ("stdout", "stderr"):
             _add_vlarray(agent_file, gg, n, getattr(result_agent, n))
@@ -426,7 +434,9 @@ def _add_agent(results_file: tables.File, agent_name: str) -> None:
 
     found = False
     for ac_row in results_file.root.current.where(f'(name == b"{agent_name}")'):
-        assert not found, "Somehow there was more than one row with the same agent name"
+        assert (
+            not found
+        ), f"There was more than one row with the same agent name: {agent_name}"
         found = True
         ac_row["version"] = n_versions
         ac_row["uploaded/time_str"] = t_str
@@ -460,7 +470,9 @@ def _get_current_agent_version(results_file: tables.File, agent_name: str) -> in
     found = False
     version = -1
     for ac_row in results_file.root.current.where(f'(name == b"{agent_name}")'):
-        assert not found, "Somehow there was more than one row with the same agent name"
+        assert (
+            not found
+        ), f"There was more than one row with the same agent name: {agent_name}"
         found = True
         version = ac_row["version"]
     return version
@@ -499,12 +511,12 @@ def _record_outcome(results_file: tables.File, game_result: GameResult) -> None:
         vt.flush()
 
 
-T = TypeVar("T", np.floating, np.integer, np.bool)
-HomList = List[T]  # A homogeneous list, where all elements are the same generic type T
+T = TypeVar("T", np.floating, np.integer, np.bool, int, float)
+HomList = List[T]  # A homogeneous list, where all elements are the same type T
 
 
 def _add_array(
-    file: tables.File, where: tables.Group, name: str, *lists: List[HomList]
+    file: tables.File, where: tables.Group, name: str, *lists: HomList
 ) -> None:
     """
     Adds an homogeneous array to a tables file, where the array is filled
@@ -561,7 +573,7 @@ def _add_vlarray(
             to_store = [np.array(ll) for ll in to_store]
             atom = tables.Atom.from_dtype(to_store[0].dtype)
     else:
-        atom = tables.StringAtom(1)
+        atom = tables.StringAtom()
 
     vla = file.create_vlarray(
         where, name, atom=atom, filters=compression_filter, expectedrows=len(to_store),

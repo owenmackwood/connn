@@ -101,21 +101,23 @@ def run_games(q: mp.Queue, play_all: bool = True):
         if play_all:
             play_all = False
             updated_agents = list(agents())
-            print(f"Just started, running all-against-all once.")
+            logging.info(f"Just started, running all-against-all once.")
         else:
             # Check the message queue for updated agents
-            print("Game-playing process entering queue to wait for new agents")
+            logging.info("Game-playing process entering queue to wait for new agents")
             try:
                 q_data = q.get(block=True, timeout=run_all_after)
             except EmptyQueue:
                 updated_agents = list(agents())
-                print("Timed out waiting for new agents, running all-against-all.")
+                logging.info(
+                    "Timed out waiting for new agents, running all-against-all."
+                )
             else:
                 if isinstance(q_data, str) and q_data == "SHUTDOWN":
                     return
                 else:
                     updated_agents = update_user_agent_code(q_data)
-                    print(
+                    logging.info(
                         f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
                     )
 
@@ -128,18 +130,18 @@ def run_games(q: mp.Queue, play_all: bool = True):
             if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
         ]
 
-        print(f"About to play {len(to_play)*repetitions} games.")
+        logging.info(f"About to play {len(to_play)*repetitions} games.")
         for g in repetitions * to_play:
             try:
                 game_result = run_game(*g)
                 results.add_game(game_result)
             except Exception:
                 logging.exception("This should not happen, unless we are testing")
-        print("Finished game-play round.")
+        logging.info("Finished game-play round.")
 
 
 def run_game_cluster(agent_1: str, agent_2: str):
-    print(f"Submitting game between {agent_1} and {agent_2} to the queue.")
+    logging.info(f"Submitting game between {agent_1} and {agent_2} to the queue.")
     raise NotImplementedError("No implementation of run_game_cluster yet")
 
 
@@ -169,7 +171,9 @@ def run_game_local(
     gen_move = {}
     for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
         try:
-            gen_move[agent_name]: GenMove = getattr(agent_modules[agent_name], "generate_move")
+            gen_move[agent_name]: GenMove = getattr(
+                agent_modules[agent_name], "generate_move"
+            )
         except AttributeError:
             results[player].stderr.append(
                 "\nYou did not define generate_move at the package level"
@@ -188,7 +192,7 @@ def run_game_local(
     game_state = initialize_game_state()
     nth_move = 0
     try:
-        print(f"Playing game between {agent_1} and {agent_2}")
+        logging.info(f"Playing game between {agent_1} and {agent_2}")
         moves_q = mp.Manager().Queue()
 
         end_state = STILL_PLAYING
@@ -196,10 +200,12 @@ def run_game_local(
         action = PlayerAction(0)
         while playing:
             for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
-                move_seed = rs.randint(2**32)
+                move_seed = rs.randint(2 ** 32)
                 results[player].seeds.append(move_seed)
 
-                gma = GenMoveArgs(move_seed, game_state.copy(), player, states[agent_name])
+                gma = GenMoveArgs(
+                    move_seed, game_state.copy(), player, states[agent_name]
+                )
                 moves_q.put(gma)
                 if IS_DEBUGGING:
                     generate_move_process(gen_move[agent_name], moves_q)
@@ -239,7 +245,7 @@ def run_game_local(
                     msg = f"Agent {agent_name} used {mib(state_size):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB"
                     raise AgentFailed(msg)
 
-                if not np.issubdtype(action, np.integer):
+                if not np.issubdtype(type(action), np.integer):
                     msg = f"Agent {agent_name} returned an invalid type of action {type(action)}"
                     raise AgentFailed(msg)
 
@@ -256,7 +262,7 @@ def run_game_local(
                 if not playing:
                     break
             nth_move += 1
-        print(pretty_print_board(game_state))
+        logging.info(pretty_print_board(game_state))
         for p_i, result in results.items():
             mt = result.move_times
             if len(mt):
@@ -264,25 +270,27 @@ def run_game_local(
                 var_mt = f"var: {np.var(mt):.1f}"
                 median_mt = f"median: {np.median(mt):.1f}s"
                 max_mt = f"max: {np.max(mt):.1f}s"
-                print(
+                logging.info(
                     f"Move times for {get_name(p_i)} -> {median_mt} {mean_mt} {var_mt} {max_mt}"
                 )
 
         if end_state == IS_WIN:
             winner = player
-            print(
+            logging.info(
                 f"Game finished, {get_name(player)} beat {get_name(other_player(player))} by playing column {action}."
             )
         elif end_state == IS_DRAW:
             winner = NO_PLAYER
-            print("Game finished, no winner")
+            logging.info("Game finished, no winner")
         else:
-            print("Something went wrong, game-play stopped before the end state.")
+            logging.info(
+                "Something went wrong, game-play stopped before the end state."
+            )
 
     except AgentFailed as err:
-        print(pretty_print_board(game_state))
-        print(f"Agent failed: {agent_name}")
-        print(err)
+        logging.info(pretty_print_board(game_state))
+        logging.info(f"Agent failed: {agent_name}")
+        logging.info(err)
         winner = other_player(player)
         results[player].stderr.append(str(err))
         loser_result = "FAIL"
