@@ -124,25 +124,48 @@ def run_games(q: mp.Queue, play_all: bool = True):
         agent_modules = import_agents(agent_modules)
         agent_modules.pop("agent_fail", None)
 
-        to_play = [
-            g
+        to_play = repetitions * [
+            list(g)  # grid_map wants args as a list
             for g in product(agent_modules.keys(), agent_modules.keys())
             if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
         ]
 
-        logging.info(f"About to play {len(to_play)*repetitions} games.")
-        for g in repetitions * to_play:
-            try:
-                game_result = run_game(*g)
-                results.add_game(game_result)
-            except Exception:
-                logging.exception("This should not happen, unless we are testing")
+        logging.info(f"About to play {len(to_play)} games.")
+        if ON_CLUSTER:
+            run_games_cluster(to_play)
+        else:
+            run_games_local(to_play)
+
         logging.info("Finished game-play round.")
 
 
-def run_game_cluster(agent_1: str, agent_2: str):
-    logging.info(f"Submitting game between {agent_1} and {agent_2} to the queue.")
-    raise NotImplementedError("No implementation of run_game_cluster yet")
+def run_games_cluster(to_play):
+    from gridmap import grid_map
+    import connectn.results as results
+
+    logging.info(f"Submitting games to the queue: {to_play}")
+
+    for game_result in grid_map(
+        run_game_local,
+        to_play,
+        mem_free="2G",
+        name="connect4tournament",
+        num_slots=1,
+        queue="cognition-all.q",
+        require_cluster=True,
+    ):
+        results.add_game(game_result)
+
+
+def run_games_local(to_play):
+    import connectn.results as results
+
+    for g in to_play:
+        try:
+            game_result = run_game_local(*g)
+            results.add_game(game_result)
+        except Exception:
+            logging.exception("This should not happen, unless we are testing")
 
 
 def run_game_local(
@@ -607,9 +630,3 @@ def human_vs_agent(generate_move: GenMove):
                         print(f'Player {"X" if player == PLAYER1 else "O"} won')
                     playing = False
                     break
-
-
-if ON_CLUSTER:
-    run_game = run_game_cluster
-else:
-    run_game = run_game_local

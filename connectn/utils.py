@@ -6,6 +6,7 @@ import numpy as np
 import os
 import sys
 from pathlib import Path
+import platform
 
 LISTEN_PORT = 2323
 ARCHIVE_FORMAT = "tar"
@@ -13,7 +14,9 @@ DATA_DIR: Path = Path.home() / "ppp_results"
 KEY_SALT_FILE: Path = DATA_DIR / "keys_salts"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
-ON_CLUSTER = False
+cluster_url = 'cluster.ml.tu-berlin.de'
+hostname = platform.node()
+ON_CLUSTER = hostname == cluster_url
 
 
 class SavedState:

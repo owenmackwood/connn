@@ -163,7 +163,7 @@ def test_generate_move_process(empty_board: np.ndarray):
     generate_move_process(fail_move, q)
     ret: GenMoveFailure = q.get()
     error_msg = ret.error_msg
-    assert error_msg.startswith("Exception('Test failure')")
+    assert error_msg.startswith("Exception('Test failure',)")
     assert error_msg.endswith('raise Exception("Test failure")\n')
 
 
@@ -189,18 +189,34 @@ def test_run_game_local():
 
     seed = 0
     gr = run_game_local("agent_columns", "agent_rows", seed)
-    assert gr.winner == PLAYER2
-    assert gr.result_2.outcome == "WIN" and gr.result_1.outcome == "LOSS"
-    assert gr.result_1.moves == [2, 2, 2, 2, 2, 3, 3]
-    assert gr.result_2.moves == [0, 1, 2, 3, 4, 5, 6]
+    assert gr.winner == PLAYER1
+    assert gr.result_1.outcome == "WIN" and gr.result_2.outcome == "LOSS"
+    assert gr.result_1.moves == [5, 5, 5, 5]
+    assert gr.result_2.moves == [0, 1, 2]
     assert gr.result_1.name == "agent_columns" and gr.result_2.name == "agent_rows"
 
 
-@pytest.mark.xfail(raises=NotImplementedError, strict=True)
-def test_run_game_cluster():
-    from connectn.game import run_game_cluster
+def test_run_game_cluster(monkeypatch):
+    from connectn.game import run_games_cluster, GameResult, AgentResult
+    import connectn.results as results
+    import gridmap
 
-    run_game_cluster("", "")
+    def mock_grid_map(fn, all_args, mem_free, name, num_slots, queue, require_cluster):
+        assert callable(fn)
+        assert mem_free == "2G"
+        assert queue == "cognition-all.q"
+        assert require_cluster
+        for agent_1, agent_2 in all_args:
+            yield GameResult(AgentResult(agent_1), AgentResult(agent_2))
+
+    def mock_add_game(game_result):
+        assert isinstance(game_result, GameResult)
+
+    monkeypatch.setattr(gridmap, "grid_map", mock_grid_map)
+    monkeypatch.setattr(results, "add_game", mock_add_game)
+    run_games_cluster(
+        [["group_a", "group_b"],]
+    )
 
 
 def test_run_games(monkeypatch):
@@ -246,7 +262,7 @@ def test_run_games(monkeypatch):
     updated_agents_b = [("agent_columns", "no file"), ("agent_random", "no file")]
     for updated_agents in (updated_agents_a, updated_agents_b):
         agent_names = [agent_name for agent_name, _ in updated_agents]
-        monkeypatch.setattr(game, "run_game", partial(mock_run_game, agent_names))
+        monkeypatch.setattr(game, "run_game_local", partial(mock_run_game, agent_names))
         monkeypatch.setattr(
             utils,
             "update_user_agent_code",
