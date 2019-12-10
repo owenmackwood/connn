@@ -143,6 +143,13 @@ def run_games(q: mp.Queue, play_all: bool = True):
 def run_games_cluster(to_play):
     from gridmap import grid_map
     import connectn.results as results
+    from connectn.utils import TEMP_DIR
+
+    if not TEMP_DIR.exists():
+        TEMP_DIR.mkdir()
+
+    job_temp_dir = TEMP_DIR / time.strftime('%Y-%m-%d-%Hh%Mm%Ss')
+    job_temp_dir.mkdir()
 
     logging.info(f"Submitting games to the queue: {to_play}")
 
@@ -152,6 +159,7 @@ def run_games_cluster(to_play):
         mem_free="2G",
         name="connect4tournament",
         num_slots=1,
+        temp_dir=f"{job_temp_dir!s}",
         queue="cognition-all.q",
         require_cluster=True,
     ):

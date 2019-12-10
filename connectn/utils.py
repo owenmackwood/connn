@@ -13,6 +13,7 @@ ARCHIVE_FORMAT = "tar"
 DATA_DIR: Path = Path.home() / "tournament"
 KEY_SALT_FILE: Path = DATA_DIR / "keys_salts"
 LOG_FILE: Path = DATA_DIR / "server.log"
+TEMP_DIR: Path = DATA_DIR / "tmp"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
 cluster_url = 'cluster'
