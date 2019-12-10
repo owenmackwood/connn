@@ -15,7 +15,7 @@ KEY_SALT_FILE: Path = DATA_DIR / "keys_salts"
 LOG_FILE: Path = DATA_DIR / "server.log"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
-cluster_url = 'cluster.ml.tu-berlin.de'
+cluster_url = 'cluster'
 hostname = platform.node()
 ON_CLUSTER = hostname == cluster_url
 

@@ -130,10 +130,11 @@ def run_games(q: mp.Queue, play_all: bool = True):
             if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
         ]
 
-        logging.info(f"About to play {len(to_play)} games.")
         if ON_CLUSTER:
+            logging.info(f"About to play {len(to_play)} games on the cluster.")
             run_games_cluster(to_play)
         else:
+            logging.info(f"About to play {len(to_play)} games locally.")
             run_games_local(to_play)
 
         logging.info("Finished game-play round.")
