@@ -6,6 +6,7 @@ password = "rgIWtVRp"
 module_location = Path("~/codebase/connn/connectn/agents/agent_mcts")
 results_location = Path.home() / "tournament" / "results"
 
+
 def parse_arguments():
     global group_name, password, module_location
     parser = argparse.ArgumentParser()
@@ -77,7 +78,9 @@ def connect():
             if up_or_down == "UPLOAD":
                 msg = scs.read_wait()
                 if msg != "READY":
-                    raise Exception(f"When waiting to upload server responded with: {msg}")
+                    raise Exception(
+                        f"When waiting to upload server responded with: {msg}"
+                    )
 
                 with tempfile.NamedTemporaryFile() as tar_file:
                     with tarfile.open(tar_file.name, "w") as tar:
@@ -101,9 +104,11 @@ def connect():
                 if not results_location.exists():
                     results_location.mkdir()
 
-                file_path = (results_location / time.strftime('%Y-%m-%d-%Hh%Mm%Ss')).with_suffix(".h5")
+                file_path = (
+                    results_location / time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+                ).with_suffix(".h5")
                 if bytes_received == bytes_expected:
-                    with open(f"{file_path!s}", 'wb') as f:
+                    with open(f"{file_path!s}", "wb") as f:
                         f.write(data)
                         msg = "OK"
                 scs.write(msg)

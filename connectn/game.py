@@ -88,11 +88,11 @@ class GenMoveFailure(GenMoveResult):
         self.error_msg = error_msg
 
 
-def run_games(q: mp.Queue, play_all: bool = True):
+def run_games(rq: mp.Queue, sq: mp.Queue, play_all: bool = True):
     from itertools import product
     from queue import Empty as EmptyQueue
     from connectn.utils import update_user_agent_code
-    import connectn.results as results
+    from connectn import results
 
     repetitions = 1
     run_all_after = 60 * 60  # Run all-against-all every 60 minutes
@@ -108,7 +108,7 @@ def run_games(q: mp.Queue, play_all: bool = True):
             # Check the message queue for updated agents
             logger.info("Game-playing process entering queue to wait for new agents")
             try:
-                q_data = q.get(block=True, timeout=run_all_after)
+                q_data = rq.get(block=True, timeout=run_all_after)
             except EmptyQueue:
                 updated_agents = list(agents())
                 logger.info(
@@ -138,6 +138,15 @@ def run_games(q: mp.Queue, play_all: bool = True):
         else:
             logger.info(f"About to play {len(to_play)} games locally.")
             run_games_local(to_play)
+
+        played = set(n for p in to_play for n in p if results.record_games_for_agent(n))
+
+        new_results = {}
+        for agent_name in played:
+            with open(f"{results.agent_games_file_path(agent_name)}", "rb") as f:
+                new_results[agent_name] = f.read()
+        logger.info(f"Sending {len(new_results)} modified result files to the server.")
+        sq.put(new_results)
 
         logger.info("Finished game-play round.")
 

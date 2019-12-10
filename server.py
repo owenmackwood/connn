@@ -1,5 +1,6 @@
 import socket
 import logging
+import multiprocessing as mp
 from connectn.utils import configure_logging, parse_arguments
 
 parse_arguments()
@@ -7,14 +8,17 @@ configure_logging()
 
 
 def run_server():
-    import multiprocessing as mp
     from connectn.utils import LISTEN_PORT, InactiveSocket
     from connectn.game import run_games
 
     logger = logging.getLogger(__name__)
-    q = mp.Queue()
-    rg = mp.Process(target=run_games, args=(q,))
+    manager = mp.Manager()
+    sq = manager.Queue()
+    rq = manager.Queue()
+
+    rg = mp.Process(target=run_games, args=(sq, rq))
     rg.start()
+
     print("Started run_games process")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ls:
         try:
@@ -38,8 +42,11 @@ def run_server():
                         logger.info(
                             f"Server sending {len(updated_agent_archives)} new agents for game-play."
                         )
-                        q.put(updated_agent_archives)
+                        sq.put(updated_agent_archives)
                         updated_agent_archives = []
+                    else:
+                        store_results_local(rq)
+
                 except Exception:
                     logger.exception("Unexpected error, will try to keep running.")
         finally:
@@ -49,9 +56,34 @@ def run_server():
             If the port is orphaned use:
             fuser -kn tcp <port>
             """
-            q.put("SHUTDOWN")
+            sq.put("SHUTDOWN")
             rg.join()
             print("Finished shutdown")
+
+
+def store_results_local(rq: mp.Queue):
+    from connectn.utils import DATA_DIR
+    from queue import Empty as EmptyQueue
+
+    result_path = DATA_DIR / "local"
+
+    logger = logging.getLogger(__name__)
+    try:
+        updated_results = rq.get(block=False)
+    except EmptyQueue:
+        pass
+    else:
+        if updated_results:
+            if not result_path.exists():
+                result_path.mkdir()
+
+            logger.info(f"Storing {len(updated_results)} result files.")
+
+            for agent_name, results_data in updated_results.items():
+                agent_result = (result_path / agent_name).with_suffix(".h5")
+                with open(f"{agent_result!s}", "wb") as f:
+                    f.write(results_data)
+            logger.info("Finished storing the result files.")
 
 
 def handle_client(cs: socket.socket, updated_agent_archives: list):
@@ -79,7 +111,9 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
                 logger.info(f"Now starting transfer of {bytes_expected} bytes")
                 data = scs.read_wait()
                 bytes_received = len(data)
-                logger.info(f"Received bytes {bytes_received}, expected {bytes_expected}")
+                logger.info(
+                    f"Received bytes {bytes_received}, expected {bytes_expected}"
+                )
                 msg = "FAIL"
                 if bytes_received == bytes_expected:
                     with tempfile.NamedTemporaryFile(delete=False) as f:
@@ -87,6 +121,9 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
                         exists = None
                         for pending in updated_agent_archives:
                             if pending[0] == uid_pw[0]:
+                                logger.warning(
+                                    f"Found pending update. It will be overwritten {pending}"
+                                )
                                 exists = pending
                                 os.remove(pending[1])
                         if exists is not None:
@@ -101,9 +138,13 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
                     scs.write(f.read())
                 msg = scs.read_wait()
                 if msg == "OK":
-                    logger.info(f"Agent {uid_pw[0]} successfully received results file.")
+                    logger.info(
+                        f"Agent {uid_pw[0]} successfully received results file."
+                    )
                 else:
-                    logger.error(f"Agent {uid_pw[0]} failed to receive results file: {msg}")
+                    logger.error(
+                        f"Agent {uid_pw[0]} failed to receive results file: {msg}"
+                    )
             else:
                 msg = "FAIL"
             scs.write(msg)

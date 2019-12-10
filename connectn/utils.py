@@ -70,7 +70,9 @@ def parse_arguments():
     import argparse
 
     global LOG_LEVEL, MOVE_TIME_MAX, LOG_FILE, STATE_MEMORY_MAX
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "--logfile",
         help="Path and name of log file.",
@@ -118,6 +120,10 @@ def configure_logging():
         level=numeric_level,
         format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
     )
+    root = logging.getLogger()
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(numeric_level)
+    root.addHandler(stdout_handler)
 
 
 def get_size(obj, seen=None) -> int:

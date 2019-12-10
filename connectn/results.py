@@ -128,11 +128,11 @@ def add_game(game_result: GameResult) -> None:
 
         agent_1_version = _get_current_agent_version(results_file, agent_1_name)
         agent_2_version = _get_current_agent_version(results_file, agent_2_name)
-        if _record_games_for_agent(agent_1_name):
+        if record_games_for_agent(agent_1_name):
             _add_game_for_agent(
                 agent_1_name, agent_1_version, agent_2_version, game_result
             )
-        if _record_games_for_agent(agent_2_name):
+        if record_games_for_agent(agent_2_name):
             _add_game_for_agent(
                 agent_2_name, agent_2_version, agent_1_version, game_result
             )
@@ -323,7 +323,7 @@ def _check_for_agent(results_file: tables.File, agent_name: str) -> None:
         _add_agent(results_file, agent_name)
 
 
-def _record_games_for_agent(agent_name: str) -> bool:
+def record_games_for_agent(agent_name: str) -> bool:
     """
     Decide whether a complete record of a game should be
     recorded for the given agent. Currently complete records
@@ -532,7 +532,9 @@ def _add_array(
     lists : list of lists, each containing the same scalar data type (e.g. float, int)
     """
     arrays = [np.array(ll) for ll in lists]
-    nda = np.empty((max(a.size for a in arrays), len(arrays)), dtype=arrays[0].dtype)
+    nda = np.empty(
+        (max(1, max(a.size for a in arrays)), len(arrays)), dtype=arrays[0].dtype
+    )
     nda.fill(-1)
     for i, a in enumerate(arrays):
         nda[: a.size, i] = a
@@ -574,7 +576,7 @@ def _add_vlarray(
             to_store = [np.array(ll) for ll in to_store]
             atom = tables.Atom.from_dtype(to_store[0].dtype)
     else:
-        atom = tables.StringAtom()
+        atom = tables.StringAtom(itemsize=1)
 
     vla = file.create_vlarray(
         where, name, atom=atom, filters=compression_filter, expectedrows=len(to_store),

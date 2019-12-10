@@ -265,7 +265,8 @@ def test_run_games(monkeypatch):
         assert agent_1 in all_agents and agent_2 in all_agents
         return GameResult(AgentResult(agent_1), AgentResult(agent_2))
 
-    q = Queue()
+    sq = Queue()
+    rq = Queue()
     updated_agents_a = [("agent_rows", "no file")]
 
     updated_agents_b = [("agent_columns", "no file"), ("agent_random", "no file")]
@@ -278,6 +279,10 @@ def test_run_games(monkeypatch):
             partial(mock_update_user_agent_code, updated_agents),
         )
 
-        q.put(updated_agents)
-        q.put("SHUTDOWN")
-        run_games(q, play_all=False)
+        sq.put(updated_agents)
+        sq.put("SHUTDOWN")
+        run_games(sq, rq, play_all=False)
+        try:
+            rq.get()
+        except:
+            pass
