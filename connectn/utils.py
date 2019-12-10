@@ -10,14 +10,17 @@ import platform
 
 LISTEN_PORT = 2323
 ARCHIVE_FORMAT = "tar"
-DATA_DIR: Path = Path.home() / "ppp_results"
+DATA_DIR: Path = Path.home() / "tournament"
 KEY_SALT_FILE: Path = DATA_DIR / "keys_salts"
+LOG_FILE: Path = DATA_DIR / "server.log"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
 cluster_url = 'cluster.ml.tu-berlin.de'
 hostname = platform.node()
 ON_CLUSTER = hostname == cluster_url
 
+if not DATA_DIR.exists():
+    DATA_DIR.mkdir()
 
 class SavedState:
     pass

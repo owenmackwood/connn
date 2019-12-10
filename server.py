@@ -4,8 +4,10 @@ import socket
 def run_server():
     import logging
     import multiprocessing as mp
-    from connectn.utils import LISTEN_PORT, InactiveSocket
+    from connectn.utils import LISTEN_PORT, InactiveSocket, LOG_FILE
     from connectn.game import run_games
+
+    logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG)
 
     q = mp.Queue()
     rg = mp.Process(target=run_games, args=(q,))
