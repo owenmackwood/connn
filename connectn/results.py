@@ -11,6 +11,7 @@ from typing import Iterable, List, Dict, Any, TypeVar, Union
 RESULTS_FILE_PATH = DATA_DIR / "results.h5"
 name_size = 32
 compression_filter = tables.Filters(complevel=5, complib="zlib")
+logger = logging.getLogger(__name__)
 
 """
 agents
@@ -213,7 +214,7 @@ def get_game_numbers_for_agent_version(
                 gt: tables.Table = agent_file.get_node(vg, "games")
                 game_numbers += gt.col("game_number").tolist()
             except tables.NoSuchNodeError:
-                logging.info(
+                logger.info(
                     f"No record of games for {agent_name} for version {agent_version}"
                 )
     return game_numbers
@@ -277,20 +278,20 @@ def get_game_for_agent(
 
         if not found:
             msg = f"Game {game_number} for {agent_name} version {agent_version} was not found in the games table."
-            logging.error(msg)
+            logger.error(msg)
 
         try:
             gg: tables.Group = agent_file.get_node(vg, _game_string(game_number))
         except tables.NoSuchNodeError:
             msg = f"No complete record of game {game_number} for {agent_name} version {agent_version} exists."
-            logging.error(msg)
+            logger.error(msg)
         else:
             for n in ("moves", "move_times", "state_size", "seeds"):
                 try:
                     game_info[n] = agent_file.get_node(gg, n).read()
                 except tables.NoSuchNodeError:
                     msg = f"{n} not found for {agent_name}, version {agent_version}, game {game_number}"
-                    logging.error(msg)
+                    logger.error(msg)
 
             for n in ("stdout", "stderr"):
                 game_info[n] = []
@@ -299,7 +300,7 @@ def get_game_for_agent(
                         game_info[n].append(std_.decode())
                 except tables.NoSuchNodeError:
                     msg = f"{n} not found for {agent_name}, version {agent_version}, game {game_number}"
-                    logging.error(msg)
+                    logger.error(msg)
 
     return game_info
 

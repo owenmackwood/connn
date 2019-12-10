@@ -10,6 +10,8 @@ from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
 from connectn import IS_DEBUGGING
 import numba as nb
 
+logger = logging.getLogger(__name__)
+
 CONNECT_N = np.int8(4)
 
 PlayerAction = np.int8
@@ -101,15 +103,15 @@ def run_games(q: mp.Queue, play_all: bool = True):
         if play_all:
             play_all = False
             updated_agents = list(agents())
-            logging.info(f"Just started, running all-against-all once.")
+            logger.info(f"Just started, running all-against-all once.")
         else:
             # Check the message queue for updated agents
-            logging.info("Game-playing process entering queue to wait for new agents")
+            logger.info("Game-playing process entering queue to wait for new agents")
             try:
                 q_data = q.get(block=True, timeout=run_all_after)
             except EmptyQueue:
                 updated_agents = list(agents())
-                logging.info(
+                logger.info(
                     "Timed out waiting for new agents, running all-against-all."
                 )
             else:
@@ -117,7 +119,7 @@ def run_games(q: mp.Queue, play_all: bool = True):
                     return
                 else:
                     updated_agents = update_user_agent_code(q_data)
-                    logging.info(
+                    logger.info(
                         f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
                     )
 
@@ -131,13 +133,13 @@ def run_games(q: mp.Queue, play_all: bool = True):
         ]
 
         if ON_CLUSTER:
-            logging.info(f"About to play {len(to_play)} games on the cluster.")
+            logger.info(f"About to play {len(to_play)} games on the cluster.")
             run_games_cluster(to_play)
         else:
-            logging.info(f"About to play {len(to_play)} games locally.")
+            logger.info(f"About to play {len(to_play)} games locally.")
             run_games_local(to_play)
 
-        logging.info("Finished game-play round.")
+        logger.info("Finished game-play round.")
 
 
 def run_games_cluster(to_play):
@@ -148,19 +150,20 @@ def run_games_cluster(to_play):
     if not TEMP_DIR.exists():
         TEMP_DIR.mkdir()
 
-    job_temp_dir = TEMP_DIR / time.strftime('%Y-%m-%d-%Hh%Mm%Ss')
+    job_temp_dir = TEMP_DIR / time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
     job_temp_dir.mkdir()
 
-    logging.info(f"Submitting games to the queue: {to_play}")
+    logger.info(f"Submitting games to the queue: {to_play}")
 
     for game_result in grid_map(
         run_game_local,
         to_play,
         mem_free="2G",
-        name="connect4tournament",
+        name="conn4match",
         num_slots=1,
         temp_dir=f"{job_temp_dir!s}",
         queue="cognition-all.q",
+        add_env={"CREATE_PLOTS": "FALSE", "USE_MEM_FREE": "TRUE"},
         require_cluster=True,
     ):
         results.add_game(game_result)
@@ -174,7 +177,7 @@ def run_games_local(to_play):
             game_result = run_game_local(*g)
             results.add_game(game_result)
         except Exception:
-            logging.exception("This should not happen, unless we are testing")
+            logger.exception("This should not happen, unless we are testing")
 
 
 def run_game_local(
@@ -217,14 +220,14 @@ def run_game_local(
         except KeyError as e:
             # If this occurs and it isn't for agent_fail, then something has gone terribly wrong.
             # Presumably one of the agents is not defined in users.py
-            logging.exception("Something has gone terribly wrong")
+            logger.exception("Something has gone terribly wrong")
             raise e
 
     loser_result = "LOSS"
     game_state = initialize_game_state()
     nth_move = 0
     try:
-        logging.info(f"Playing game between {agent_1} and {agent_2}")
+        logger.info(f"Playing game between {agent_1} and {agent_2}")
         moves_q = mp.Manager().Queue()
 
         end_state = STILL_PLAYING
@@ -294,7 +297,7 @@ def run_game_local(
                 if not playing:
                     break
             nth_move += 1
-        logging.info(pretty_print_board(game_state))
+        logger.info(pretty_print_board(game_state))
         for p_i, result in results.items():
             mt = result.move_times
             if len(mt):
@@ -302,27 +305,25 @@ def run_game_local(
                 var_mt = f"var: {np.var(mt):.1f}"
                 median_mt = f"median: {np.median(mt):.1f}s"
                 max_mt = f"max: {np.max(mt):.1f}s"
-                logging.info(
+                logger.info(
                     f"Move times for {get_name(p_i)} -> {median_mt} {mean_mt} {var_mt} {max_mt}"
                 )
 
         if end_state == IS_WIN:
             winner = player
-            logging.info(
+            logger.info(
                 f"Game finished, {get_name(player)} beat {get_name(other_player(player))} by playing column {action}."
             )
         elif end_state == IS_DRAW:
             winner = NO_PLAYER
-            logging.info("Game finished, no winner")
+            logger.info("Game finished, no winner")
         else:
-            logging.info(
-                "Something went wrong, game-play stopped before the end state."
-            )
+            logger.info("Something went wrong, game-play stopped before the end state.")
 
     except AgentFailed as err:
-        logging.info(pretty_print_board(game_state))
-        logging.info(f"Agent failed: {agent_name}")
-        logging.info(err)
+        logger.info(pretty_print_board(game_state))
+        logger.info(f"Agent failed: {agent_name}")
+        logger.info(err)
         winner = other_player(player)
         results[player].stderr.append(str(err))
         loser_result = "FAIL"
@@ -381,7 +382,6 @@ def run_game_local(
 def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     from traceback import StackSummary
     from random import seed as random_seed
-    import logging
     import io
     from time import time
     from contextlib import redirect_stderr, redirect_stdout
@@ -401,7 +401,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
         stdout, stderr = f_stdout.getvalue(), f_stderr.getvalue()
         result = GenMoveSuccess(stdout, stderr, move_time, action, saved_state)
     except Exception as e:
-        logging.exception("An exception was thrown by the agent.")
+        logger.exception("An exception was thrown by the agent.")
         error_msg = repr(e) + "\n"
         extracted_list = traceback.extract_tb(e.__traceback__)
         for item in StackSummary.from_list(extracted_list).format():
@@ -413,7 +413,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
 
 
 def pretty_print_board(board: np.ndarray) -> str:
-    bs = "|" + "=" * 2 * board.shape[1] + "|\n"
+    bs = "\n|" + "=" * 2 * board.shape[1] + "|\n"
     for i in range(board.shape[0] - 1, -1, -1):
         bs += "|"
         for j in range(board.shape[1]):

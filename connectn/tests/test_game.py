@@ -201,12 +201,21 @@ def test_run_game_cluster(monkeypatch):
     import connectn.results as results
     import gridmap
 
-    def mock_grid_map(fn, all_args, mem_free, name, num_slots, queue, require_cluster):
+    def mock_grid_map(fn, args_list, **kwargs):
+        """  f, args_list, cleanup=True, mem_free="1G", name='gridmap_job',
+             num_slots=1, temp_dir=DEFAULT_TEMP_DIR, white_list=None,
+             queue=DEFAULT_QUEUE, quiet=True, local=False, max_processes=1,
+             interpreting_shell=None, copy_env=True, add_env=None,
+             completion_mail=False, require_cluster=False, par_env=DEFAULT_PAR_ENV"""
         assert callable(fn)
-        assert mem_free == "2G"
-        assert queue == "cognition-all.q"
-        assert require_cluster
-        for agent_1, agent_2 in all_args:
+        assert "mem_free" in kwargs and kwargs["mem_free"] == "2G"
+        assert "queue" in kwargs and kwargs["queue"] == "cognition-all.q"
+        assert "require_cluster" in kwargs and kwargs["require_cluster"]
+        assert "add_env" in kwargs
+        add_env = kwargs["add_env"]
+        assert "USE_MEM_FREE" in add_env
+        assert "CREATE_PLOTS" in add_env
+        for agent_1, agent_2 in args_list:
             yield GameResult(AgentResult(agent_1), AgentResult(agent_2))
 
     def mock_add_game(game_result):

@@ -16,12 +16,12 @@ LOG_FILE: Path = DATA_DIR / "server.log"
 TEMP_DIR: Path = DATA_DIR / "tmp"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
-cluster_url = 'cluster'
-hostname = platform.node()
-ON_CLUSTER = hostname == cluster_url
+ON_CLUSTER = platform.node() == "cluster"
+LOG_LEVEL = "INFO"
 
 if not DATA_DIR.exists():
     DATA_DIR.mkdir()
+
 
 class SavedState:
     pass
@@ -42,12 +42,16 @@ class ComfyStockings(Stockings.Stocking):
         self.sock.close()
 
     def handshake_wait(self):
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         while self.active and not self.handshakeComplete:
-            print("Waiting for handshake")
+            logger.info("Waiting for handshake")
             sleep(0.1)
         if not self.active:
             raise InactiveSocket("Socket became inactive while waiting for handshake")
-        print(f"Handshake complete")
+        logger.info(f"Handshake complete")
 
     def read_wait(self, delay=0.1, timeout=10.0):
         t0 = time.time()
@@ -60,6 +64,60 @@ class ComfyStockings(Stockings.Stocking):
             if dt > timeout:
                 raise InactiveSocket("Timed out waiting for reply")
         raise InactiveSocket("Socket became inactive while waiting for reply")
+
+
+def parse_arguments():
+    import argparse
+
+    global LOG_LEVEL, MOVE_TIME_MAX, LOG_FILE, STATE_MEMORY_MAX
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        "--logfile",
+        help="Path and name of log file.",
+        type=str,
+        default=f"{LOG_FILE!s}",
+    )
+    parser.add_argument(
+        "--level",
+        help="Logging level.",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default=LOG_LEVEL,
+    )
+    parser.add_argument(
+        "--maxtime",
+        help="Maximum time per move in seconds.",
+        type=float,
+        default=MOVE_TIME_MAX,
+    )
+    parser.add_argument(
+        "--maxsize",
+        help="Maximum data permitted for saved_state in GiB.",
+        type=float,
+        default=1.0,
+    )
+    args = parser.parse_args()
+
+    LOG_FILE = Path(args.logfile).expanduser()
+    LOG_LEVEL = args.level.upper()
+    MOVE_TIME_MAX = args.maxtime
+    STATE_MEMORY_MAX = int(np.round(STATE_MEMORY_MAX * args.maxsize))
+
+
+def configure_logging():
+    import logging
+
+    numeric_level = getattr(logging, LOG_LEVEL, None)
+
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"Invalid log level: {LOG_LEVEL}")
+
+    logging.basicConfig(
+        filename=f"{LOG_FILE!s}",
+        filemode="w",
+        level=numeric_level,
+        format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
+    )
 
 
 def get_size(obj, seen=None) -> int:
