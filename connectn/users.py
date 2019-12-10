@@ -12,7 +12,7 @@ user_auth = {}
 def load_user_auth() -> Dict[str, Tuple[bytes, bytes]]:
     global user_auth
     if len(user_auth) < 1 and KEY_SALT_FILE.exists():
-        with open(KEY_SALT_FILE, "rb") as f:
+        with open(f"{KEY_SALT_FILE!s}", "rb") as f:
             user_auth.update(pickle.load(f))
     return user_auth
 
@@ -98,4 +98,4 @@ def generate_users(num_users: int, pw_length: int = 8, append: bool = True):
 
 
 if __name__ == "__main__":
-    generate_users(6, append=False)
+    generate_users(1, append=False)

@@ -60,6 +60,7 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
     import tempfile
     from connectn.users import authenticate_user
     from connectn.utils import ComfyStockings
+    import connectn.results as results
 
     logger = logging.getLogger(__name__)
     with ComfyStockings(cs) as scs:
@@ -71,25 +72,40 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
         msg = "OK" if login_valid else "FAIL"
         scs.write(msg)
         if login_valid:
-            bytes_expected = int(scs.read_wait())
-            logger.info(f"Now starting transfer of {bytes_expected} bytes")
-            data = scs.read_wait()
-            bytes_received = len(data)
-            logger.info(f"Received bytes {bytes_received}, expected {bytes_expected}")
-            msg = "FAIL"
-            if bytes_received == bytes_expected:
-                with tempfile.NamedTemporaryFile(delete=False) as f:
-                    f.write(data)
-                    exists = None
-                    for pending in updated_agent_archives:
-                        if pending[0] == uid_pw[0]:
-                            exists = pending
-                            os.remove(pending[1])
-                    if exists is not None:
-                        updated_agent_archives.remove(exists)
-                    updated_agent_archives.append((uid_pw[0], f.name))
-                    msg = "OK"
-
+            up_or_down = scs.read_wait()
+            if up_or_down == "UPLOAD":
+                scs.write("READY")
+                bytes_expected = int(scs.read_wait())
+                logger.info(f"Now starting transfer of {bytes_expected} bytes")
+                data = scs.read_wait()
+                bytes_received = len(data)
+                logger.info(f"Received bytes {bytes_received}, expected {bytes_expected}")
+                msg = "FAIL"
+                if bytes_received == bytes_expected:
+                    with tempfile.NamedTemporaryFile(delete=False) as f:
+                        f.write(data)
+                        exists = None
+                        for pending in updated_agent_archives:
+                            if pending[0] == uid_pw[0]:
+                                exists = pending
+                                os.remove(pending[1])
+                        if exists is not None:
+                            updated_agent_archives.remove(exists)
+                        updated_agent_archives.append((uid_pw[0], f.name))
+                        msg = "OK"
+            elif up_or_down == "DOWNLOAD":
+                results_path = results.agent_games_file_path(uid_pw[0])
+                file_size = os.path.getsize(f"{results_path!s}")
+                scs.write(f"{file_size!s}")
+                with open(f"{results_path!s}", "rb") as f:
+                    scs.write(f.read())
+                msg = scs.read_wait()
+                if msg == "OK":
+                    logger.info(f"Agent {uid_pw[0]} successfully received results file.")
+                else:
+                    logger.error(f"Agent {uid_pw[0]} failed to receive results file: {msg}")
+            else:
+                msg = "FAIL"
             scs.write(msg)
         sleep(0.5)
         while scs.active:

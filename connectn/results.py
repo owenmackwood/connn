@@ -204,7 +204,7 @@ def get_game_numbers_for_agent_version(
     game_numbers : list of int
     """
     game_numbers = []
-    fp = _agent_games_file_path(agent_name)
+    fp = agent_games_file_path(agent_name)
     if fp.exists():
         with tables.open_file(f"{fp!s}", "r") as agent_file:
             try:
@@ -255,7 +255,7 @@ def get_game_for_agent(
                 stderr: list of str
     """
     game_info = {}
-    with tables.open_file(f"{_agent_games_file_path(agent_name)!s}", "r") as agent_file:
+    with tables.open_file(f"{agent_games_file_path(agent_name)!s}", "r") as agent_file:
         vg = agent_file.get_node("/", _version_string(agent_version))
         gt: tables.Table = agent_file.get_node(vg, "games")
         game_result_cols = gt.colnames
@@ -355,7 +355,7 @@ def _add_game_for_agent(
     game_result : GameResult
     """
 
-    with tables.open_file(f"{_agent_games_file_path(agent_name)!s}", "a") as agent_file:
+    with tables.open_file(f"{agent_games_file_path(agent_name)!s}", "a") as agent_file:
         ver_str = _version_string(agent_version)
         gt: tables.Table
         vg: tables.Group
@@ -583,7 +583,7 @@ def _add_vlarray(
         vla.append(s)
 
 
-def _agent_games_file_path(agent_name) -> Path:
+def agent_games_file_path(agent_name) -> Path:
     """ Path to the file containing complete game records for an agent.
 
     Parameters
