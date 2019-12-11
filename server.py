@@ -11,7 +11,7 @@ if not local_result_path.exists():
 
 
 def run_server():
-    from connectn.utils import LISTEN_PORT, InactiveSocket
+    from connectn.utils import LISTEN_PORT, InactiveSocket, PLAY_ALL
     from connectn.game import run_games
     from multiprocessing.managers import SyncManager
 
@@ -22,8 +22,7 @@ def run_server():
     sq = mp.Queue()
     rq = manager.Queue()
     shutdown = manager.Event()
-    play_all = True
-    rg = mp.Process(target=_process_init, args=(run_games, sq, rq, shutdown, play_all))
+    rg = mp.Process(target=_process_init, args=(run_games, sq, rq, shutdown, PLAY_ALL))
     rg.start()
 
     logger.info("Started run_games process")
@@ -67,10 +66,10 @@ def run_server():
             ls.shutdown(socket.SHUT_RDWR)
             logger.info("Closed server socket")
 
-        logger.info("Telling run_games process to shutdown.")
-        shutdown.set()
-        rg.join()
-        logger.info("Finished server shutdown.")
+    logger.info("Telling run_games process to shutdown.")
+    shutdown.set()
+    rg.join()
+    logger.info("Finished server shutdown.")
 
 
 def store_results_local(rq: mp.Queue):

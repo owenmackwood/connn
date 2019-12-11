@@ -279,6 +279,7 @@ def run_game_local(
                     move_time = time.time() - t0
                     if ap.is_alive():
                         ap.terminate()
+                        loser_result = "TIMEOUT"
                         msg = f"Agent {agent_name} timed out after {curr_max_time} seconds ({move_time:.1f}s)."
                         raise AgentFailed(msg)
 
@@ -288,6 +289,7 @@ def run_game_local(
                 results[player].stderr.append(ret.stderr)
 
                 if isinstance(ret, GenMoveFailure):
+                    loser_result = "EXCEPTION"
                     error_msg = ret.error_msg
                     msg = f"Agent {agent_name} threw an exception:\n {error_msg}"
                     raise AgentFailed(msg)
@@ -300,16 +302,19 @@ def run_game_local(
                 results[player].state_size.append(state_size)
 
                 if state_size > STATE_MEMORY_MAX:
+                    loser_result = "MAX_STATE_MEM"
                     msg = f"Agent {agent_name} used {mib(state_size):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB"
                     raise AgentFailed(msg)
 
                 if not np.issubdtype(type(action), np.integer):
+                    loser_result = "NONINT_ACTION"
                     msg = f"Agent {agent_name} returned an invalid type of action {type(action)}"
                     raise AgentFailed(msg)
 
                 action = PlayerAction(action)
                 results[player].moves.append(action)
                 if not valid_player_action(game_state, action):
+                    loser_result = "INVALID_ACTION"
                     msg = f"Agent {agent_name} returned an invalid action {action}"
                     raise AgentFailed(msg)
 
@@ -320,17 +325,6 @@ def run_game_local(
                 if not playing:
                     break
             nth_move += 1
-        logger.info(pretty_print_board(game_state))
-        for p_i, result in results.items():
-            mt = result.move_times
-            if len(mt):
-                mean_mt = f"mean: {np.mean(mt):.1f}s"
-                var_mt = f"var: {np.var(mt):.1f}"
-                median_mt = f"median: {np.median(mt):.1f}s"
-                max_mt = f"max: {np.max(mt):.1f}s"
-                logger.info(
-                    f"Move times for {get_name(p_i)} -> {median_mt} {mean_mt} {var_mt} {max_mt}"
-                )
 
         if end_state == IS_WIN:
             winner = player
@@ -349,7 +343,6 @@ def run_game_local(
         logger.info(err)
         winner = other_player(player)
         results[player].stderr.append(str(err))
-        loser_result = "FAIL"
 
     # fig = plt.figure()
     # fig.suptitle('Odds of win')

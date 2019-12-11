@@ -18,6 +18,7 @@ MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
 ON_CLUSTER = platform.node() == "cluster"
 LOG_LEVEL = "INFO"
+PLAY_ALL = False
 
 if not DATA_DIR.exists():
     DATA_DIR.mkdir()
@@ -69,7 +70,7 @@ class ComfyStockings(Stockings.Stocking):
 def parse_arguments():
     import argparse
 
-    global LOG_LEVEL, MOVE_TIME_MAX, LOG_FILE, STATE_MEMORY_MAX
+    global LOG_LEVEL, MOVE_TIME_MAX, LOG_FILE, STATE_MEMORY_MAX, PLAY_ALL
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
@@ -98,12 +99,19 @@ def parse_arguments():
         type=float,
         default=1.0,
     )
+    parser.add_argument(
+        "--playall",
+        help="Play all possible matches on startup.",
+        type=bool,
+        default=PLAY_ALL,
+    )
     args = parser.parse_args()
 
     LOG_FILE = Path(args.logfile).expanduser()
     LOG_LEVEL = args.level.upper()
     MOVE_TIME_MAX = args.maxtime
     STATE_MEMORY_MAX = int(np.round(STATE_MEMORY_MAX * args.maxsize))
+    PLAY_ALL = args.playall
 
 
 def configure_logging():

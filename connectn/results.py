@@ -10,9 +10,9 @@ from typing import Iterable, List, Dict, Any, TypeVar, Union
 
 RESULTS_FILE_PATH = DATA_DIR / "results.h5"
 name_size = 32
+outcome_size = 16
 compression_filter = tables.Filters(complevel=5, complib="zlib")
 logger = logging.getLogger(__name__)
-
 """
 agents
     current -> Name, Current version, Current ELO rank, Last upload date / time
@@ -58,12 +58,29 @@ agent
 """
 
 
-class GameOutcomeRow(IsDescription):
+class AgentGameOutcomeRow(IsDescription):
     game_number = Int32Col(pos=0)
     opponent = StringCol(name_size, pos=1)
     version = Int32Col(pos=2)
     moved_first = BoolCol(pos=3)
-    outcome = StringCol(5, pos=4)
+    outcome = StringCol(outcome_size, pos=4)
+    when = TimeStamp()
+
+
+class FullGameAgent(IsDescription):
+    name = StringCol(name_size, pos=0)
+    version = Int32Col(pos=1)
+    rating = Float64Col(pos=2, dflt=0.0)
+    outcome = StringCol(outcome_size, pos=3)
+    time_med = Float64Col(pos=4)
+    time_max = Float64Col(pos=5)
+    state_size_med = Int32Col(pos=6)
+    state_size_max = Int32Col(pos=6)
+
+
+class FullGameRow(IsDescription):
+    agent1 = FullGameAgent()
+    agent2 = FullGameAgent()
     when = TimeStamp()
 
 
@@ -137,7 +154,7 @@ def add_game(game_result: GameResult) -> None:
                 agent_2_name, agent_2_version, agent_1_version, game_result
             )
 
-        _record_outcome(results_file, game_result)
+        _record_outcome(results_file, game_result, agent_1_version, agent_2_version)
 
         results_file.flush()
 
@@ -366,7 +383,7 @@ def _add_game_for_agent(
         try:
             gt = agent_file.get_node(vg, "games")
         except tables.NoSuchNodeError:
-            gt = agent_file.create_table(vg, "games", GameOutcomeRow)
+            gt = agent_file.create_table(vg, "games", AgentGameOutcomeRow)
 
         result_1 = game_result.result_1
         result_2 = game_result.result_2
@@ -479,7 +496,9 @@ def _get_current_agent_version(results_file: tables.File, agent_name: str) -> in
     return version
 
 
-def _record_outcome(results_file: tables.File, game_result: GameResult) -> None:
+def _record_outcome(
+    results_file: tables.File, game_result: GameResult, *agent_version: int
+) -> None:
     """
     Record the outcome of a single game for both agents that participated
     in it. More specifically, this function increments the number of
@@ -506,10 +525,38 @@ def _record_outcome(results_file: tables.File, game_result: GameResult) -> None:
                 row["lost"] += 1
             elif outcome == "DRAW":
                 row["drawn"] += 1
-            elif outcome == "FAIL":
+            else:
                 row["failed"] += 1
             row.update()
         vt.flush()
+
+    agt: tables.Table
+    try:
+        agt = results_file.root.all_games
+    except:
+        agt = results_file.create_table("/", "all_games", FullGameRow)
+    gr = agt.row
+    gr["when/time_str"] = game_result.time_str
+    gr["when/time_sec"] = game_result.time_sec
+    for i, result in enumerate((game_result.result_1, game_result.result_2), 1):
+        gr[f"agent{i}/name"] = result.name
+        gr[f"agent{i}/version"] = agent_version[i - 1]
+        gr[f"agent{i}/rating"] = 0.0
+        gr[f"agent{i}/outcome"] = result.outcome
+        if result.move_times:
+            gr[f"agent{i}/time_med"] = np.median(result.move_times)
+            gr[f"agent{i}/time_max"] = np.max(result.move_times)
+        else:
+            gr[f"agent{i}/time_med"] = -1
+            gr[f"agent{i}/time_max"] = -1
+        if result.state_size:
+            gr[f"agent{i}/state_size_med"] = np.median(result.state_size)
+            gr[f"agent{i}/state_size_max"] = np.max(result.state_size)
+        else:
+            gr[f"agent{i}/state_size_med"] = -1
+            gr[f"agent{i}/state_size_max"] = -1
+    gr.append()
+    agt.flush()
 
 
 T = TypeVar("T", np.floating, np.integer, np.bool, int, float)
