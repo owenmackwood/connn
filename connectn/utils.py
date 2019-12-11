@@ -123,6 +123,9 @@ def configure_logging():
     root = logging.getLogger()
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setLevel(numeric_level)
+    stdout_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s:%(name)s:%(message)s")
+    )
     root.addHandler(stdout_handler)
 
 

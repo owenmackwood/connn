@@ -105,7 +105,8 @@ def connect():
                     results_location.mkdir()
 
                 file_path = (
-                    results_location / time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+                    results_location
+                    / (group_name + time.strftime("-%Y-%m-%d-%Hh%Mm%Ss"))
                 ).with_suffix(".h5")
                 if bytes_received == bytes_expected:
                     with open(f"{file_path!s}", "wb") as f:

@@ -1,10 +1,13 @@
 import socket
 import logging
 import multiprocessing as mp
-from connectn.utils import configure_logging, parse_arguments
+from connectn.utils import configure_logging, parse_arguments, DATA_DIR
 
 parse_arguments()
 configure_logging()
+local_result_path = DATA_DIR / "server_process"
+if not local_result_path.exists():
+    local_result_path.mkdir()
 
 
 def run_server():
@@ -62,10 +65,7 @@ def run_server():
 
 
 def store_results_local(rq: mp.Queue):
-    from connectn.utils import DATA_DIR
     from queue import Empty as EmptyQueue
-
-    result_path = DATA_DIR / "local"
 
     logger = logging.getLogger(__name__)
     try:
@@ -74,16 +74,16 @@ def store_results_local(rq: mp.Queue):
         pass
     else:
         if updated_results:
-            if not result_path.exists():
-                result_path.mkdir()
-
             logger.info(f"Storing {len(updated_results)} result files.")
 
             for agent_name, results_data in updated_results.items():
-                agent_result = (result_path / agent_name).with_suffix(".h5")
-                with open(f"{agent_result!s}", "wb") as f:
+                with open(f"{agent_results_file_local(agent_name)!s}", "wb") as f:
                     f.write(results_data)
             logger.info("Finished storing the result files.")
+
+
+def agent_results_file_local(agent_name: str):
+    return (local_result_path / agent_name).with_suffix(".h5")
 
 
 def handle_client(cs: socket.socket, updated_agent_archives: list):
@@ -92,7 +92,6 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
     import tempfile
     from connectn.users import authenticate_user
     from connectn.utils import ComfyStockings
-    import connectn.results as results
 
     logger = logging.getLogger(__name__)
     with ComfyStockings(cs) as scs:
@@ -131,7 +130,7 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
                         updated_agent_archives.append((uid_pw[0], f.name))
                         msg = "OK"
             elif up_or_down == "DOWNLOAD":
-                results_path = results.agent_games_file_path(uid_pw[0])
+                results_path = agent_results_file_local(uid_pw[0])
                 file_size = os.path.getsize(f"{results_path!s}")
                 scs.write(f"{file_size!s}")
                 with open(f"{results_path!s}", "rb") as f:
