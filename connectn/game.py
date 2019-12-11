@@ -493,13 +493,17 @@ def connected_four(
     rows, cols = PlayerAction(board.shape[0]), PlayerAction(board.shape[1])
 
     if last_action is None:
-        for row in np.arange(rows):
-            for col in np.arange(cols - CONNECT_N + 1):
+        for col in np.arange(cols - CONNECT_N + 1):
+            for row in np.arange(rows):
+                if np.any(board[row, col : col + CONNECT_N] == NO_PLAYER):
+                    break
                 if np.all(board[row, col : col + CONNECT_N] == player):
                     return True
 
         for col in np.arange(cols):
             for row in np.arange(rows - CONNECT_N + 1):
+                if board[row + CONNECT_N - 1, col] == NO_PLAYER:
+                    break
                 if np.all(board[row : row + CONNECT_N, col] == player):
                     return True
 
@@ -565,33 +569,6 @@ def connected_four(
                 if np.all(diagonal == player):
                     return True
 
-    # else:
-    #
-    #     for row in np.arange(rows):
-    #         for col in np.arange(cols - CONNECT_N + 1):
-    #             if np.all(board[row, col : col + CONNECT_N] == player):
-    #                 return True
-    #
-    #     for col in np.arange(cols):
-    #         for row in np.arange(rows - CONNECT_N + 1):
-    #             if np.all(board[row : row + CONNECT_N, col] == player):
-    #                 return True
-    #
-    #     diagonal = np.empty(CONNECT_N, dtype=board.dtype)
-    #     for col in np.arange(cols - CONNECT_N + 1):
-    #         for row in np.arange(rows - CONNECT_N + 1):
-    #             for i in np.arange(PlayerAction(CONNECT_N)):
-    #                 diagonal[i] = board[row + i, col + i]
-    #
-    #             if np.all(diagonal == player):
-    #                 return True
-    #
-    #             for i in np.arange(PlayerAction(CONNECT_N)):
-    #                 diagonal[i] = board[row + CONNECT_N - (i + 1), col + i]
-    #
-    #             if np.all(diagonal == player):
-    #                 return True
-
     return False
 
 
@@ -648,3 +625,36 @@ def human_vs_agent(generate_move: GenMove):
                         print(f'Player {"X" if player == PLAYER1 else "O"} won')
                     playing = False
                     break
+
+
+if __name__ == "__main__":
+    import timeit
+
+    action = PlayerAction(3)
+    number = 1000000
+    for row in range(6):
+        board = initialize_game_state()
+        board[: row + 1, action] = PLAYER1
+
+        ns = {"connected_four": connected_four, "board": board, "PLAYER1": PLAYER1}
+        t0 = timeit.timeit(
+            "connected_four(board, PLAYER1)",
+            "connected_four(board, PLAYER1)",
+            globals=ns,
+            number=number,
+        )
+        print(f"Dumb version: {t0/number:e}")
+
+        ns = {
+            "connected_four": connected_four,
+            "board": board,
+            "PLAYER1": PLAYER1,
+            "action": action,
+        }
+        t0 = timeit.timeit(
+            "connected_four(board, PLAYER1, action)",
+            "connected_four(board, PLAYER1, action)",
+            globals=ns,
+            number=number,
+        )
+        print(f"'Smart' version: {t0/number:e}")

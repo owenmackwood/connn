@@ -34,6 +34,44 @@ def test_apply_player_action_fail(full_board_p1: np.ndarray):
             assert False, "Failed to throw exception when playing in full column."
 
 
+def test_check_end_state_rows(empty_board):
+    from connectn.game import check_end_state, other_player
+
+    for i in range(CONNECT_N - 1):
+        for row in range(empty_board.shape[0]):
+            for col in range(empty_board.shape[1] - CONNECT_N + i + 1):
+                for player in (PLAYER1, PLAYER2):
+                    b0 = empty_board.copy()
+                    b0[row, col : col + CONNECT_N - i] = player
+                    b0[:row, col : col + CONNECT_N - i] = other_player(player)
+                    if i == 0:
+                        assert check_end_state(b0, player) == IS_WIN
+                    else:
+                        assert check_end_state(b0, player) == STILL_PLAYING
+
+
+def test_check_end_state_cols(empty_board):
+    from connectn.game import check_end_state, other_player
+
+    for i in range(CONNECT_N - 1):
+        for col in range(empty_board.shape[1]):
+            for row in range(empty_board.shape[0] - CONNECT_N + i + 1):
+                for player in (PLAYER1, PLAYER2):
+                    b0 = empty_board.copy()
+                    b0[row : row + CONNECT_N - i, col] = player
+                    b0[:row, col] = other_player(player)
+                    if i == 0:
+                        assert check_end_state(b0, player) == IS_WIN
+                    else:
+                        assert check_end_state(b0, player) == STILL_PLAYING
+
+
+@pytest.mark.xfail(
+    reason=""" 
+No longer works with modified check_end_state due to early termination
+of row / column search if empty spots found.
+"""
+)
 def test_check_end_state_straight(empty_board: np.ndarray):
     from connectn.game import check_end_state
     from itertools import product
