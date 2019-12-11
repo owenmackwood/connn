@@ -13,16 +13,20 @@ if not local_result_path.exists():
 def run_server():
     from connectn.utils import LISTEN_PORT, InactiveSocket
     from connectn.game import run_games
+    from multiprocessing.managers import SyncManager
 
     logger = logging.getLogger(__name__)
-    manager = mp.Manager()
-    sq = manager.Queue()
-    rq = manager.Queue()
 
-    rg = mp.Process(target=run_games, args=(sq, rq))
+    manager = SyncManager()
+    manager.start(_process_init)
+    sq = mp.Queue()
+    rq = manager.Queue()
+    shutdown = manager.Event()
+    play_all = True
+    rg = mp.Process(target=_process_init, args=(run_games, sq, rq, shutdown, play_all))
     rg.start()
 
-    print("Started run_games process")
+    logger.info("Started run_games process")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ls:
         try:
             ls.settimeout(5.0)
@@ -33,35 +37,40 @@ def run_server():
             logger.exception("Failure when binding to the listening port.")
         else:
             updated_agent_archives = []
-            while True:
+            running = True
+            while running:
                 try:
                     (cs, addr) = ls.accept()
                     logger.info("Accepted connection.")
                     handle_client(cs, updated_agent_archives)
-                except InactiveSocket:
-                    logger.exception("Connection failed")
                 except socket.timeout:
                     if len(updated_agent_archives):
                         logger.info(
                             f"Server sending {len(updated_agent_archives)} new agents for game-play."
                         )
                         sq.put(updated_agent_archives)
-                        updated_agent_archives = []
-                    else:
-                        store_results_local(rq)
-
+                        updated_agent_archives.clear()
+                except InactiveSocket:
+                    logger.exception("Connection failed")
+                except KeyboardInterrupt:
+                    logger.info("KeyboardInterrupt: Shutting down")
+                    running = False
                 except Exception:
                     logger.exception("Unexpected error, will try to keep running.")
+
+                store_results_local(rq)
         finally:
-            ls.shutdown(socket.SHUT_RDWR)
-            logger.info("Closed server socket")
             """
             If the port is orphaned use:
             fuser -kn tcp <port>
             """
-            sq.put("SHUTDOWN")
-            rg.join()
-            print("Finished shutdown")
+            ls.shutdown(socket.SHUT_RDWR)
+            logger.info("Closed server socket")
+
+        logger.info("Telling run_games process to shutdown.")
+        shutdown.set()
+        rg.join()
+        logger.info("Finished server shutdown.")
 
 
 def store_results_local(rq: mp.Queue):
@@ -151,6 +160,24 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
         while scs.active:
             logger.info("Waiting for socket to become inactive")
             sleep(1.0)
+
+
+def _process_init(func=None, *args):
+    """
+    This function is used to initialize processes that need to ignore
+    the KeyboardInterrupt / SIGINT signal. This includes the
+    multiprocessing SyncManager and the run_games process.
+
+    Parameters
+    ----------
+    func : Callable, optional
+    args : Positional arguments for func
+    """
+    import signal
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    if func is not None:
+        func(*args)
 
 
 if __name__ == "__main__":

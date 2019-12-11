@@ -88,67 +88,81 @@ class GenMoveFailure(GenMoveResult):
         self.error_msg = error_msg
 
 
-def run_games(rq: mp.Queue, sq: mp.Queue, play_all: bool = True):
+def run_games(rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = True):
     from itertools import product
     from queue import Empty as EmptyQueue
     from connectn.utils import update_user_agent_code
     from connectn import results
+    from threading import Timer, Event
 
     repetitions = 1
     run_all_after = 60 * 60  # Run all-against-all every 60 minutes
+    block_time = 1
 
     agent_modules = import_agents({})
     results.initialize(agent_modules.keys())
-    while True:
-        if play_all:
-            play_all = False
-            updated_agents = list(agents())
-            logger.info(f"Just started, running all-against-all once.")
-        else:
-            # Check the message queue for updated agents
-            logger.info("Game-playing process entering queue to wait for new agents")
-            try:
-                q_data = rq.get(block=True, timeout=run_all_after)
-            except EmptyQueue:
-                updated_agents = list(agents())
-                logger.info(
-                    "Timed out waiting for new agents, running all-against-all."
-                )
+
+    if play_all:
+        logger.info(f"Just started, running all-against-all once.")
+        updated_agents = list(agents())
+    else:
+        updated_agents = []
+
+    time_to_play_all = Event()
+    timer = Timer(run_all_after, lambda ev: ev.set(), args=(time_to_play_all,))
+    timer.start()
+    while not shutdown.is_set():
+        if updated_agents:
+            agent_modules = import_agents(agent_modules)
+            agent_modules.pop("agent_fail", None)
+
+            to_play = repetitions * [
+                list(g)  # grid_map wants args as a list
+                for g in product(agent_modules.keys(), agent_modules.keys())
+                if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
+            ]
+            updated_agents.clear()
+            if ON_CLUSTER:
+                logger.info(f"About to play {len(to_play)} games on the cluster.")
+                run_games_cluster(to_play)
             else:
-                if isinstance(q_data, str) and q_data == "SHUTDOWN":
-                    return
-                else:
-                    updated_agents = update_user_agent_code(q_data)
-                    logger.info(
-                        f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
-                    )
+                logger.info(f"About to play {len(to_play)} games locally.")
+                run_games_local(to_play)
 
-        agent_modules = import_agents(agent_modules)
-        agent_modules.pop("agent_fail", None)
+            logger.info("Finished game-play round.")
 
-        to_play = repetitions * [
-            list(g)  # grid_map wants args as a list
-            for g in product(agent_modules.keys(), agent_modules.keys())
-            if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
-        ]
+            played = set(
+                n for p in to_play for n in p if results.record_games_for_agent(n)
+            )
 
-        if ON_CLUSTER:
-            logger.info(f"About to play {len(to_play)} games on the cluster.")
-            run_games_cluster(to_play)
+            new_results = {}
+            for agent_name in played:
+                with open(f"{results.agent_games_file_path(agent_name)}", "rb") as f:
+                    new_results[agent_name] = f.read()
+            logger.info(
+                f"Sending {len(new_results)} modified result files to the server."
+            )
+            sq.put(new_results)
+
+        try:
+            # Check the message queue for updated agents
+            q_data = rq.get(block=True, timeout=block_time)
+        except EmptyQueue:
+            if time_to_play_all.is_set():
+                time_to_play_all.clear()
+                timer = Timer(
+                    run_all_after, lambda ev: ev.set(), args=(time_to_play_all,)
+                )
+                timer.start()
+                updated_agents = list(agents())
+                logger.info("Timed to run all-against-all.")
         else:
-            logger.info(f"About to play {len(to_play)} games locally.")
-            run_games_local(to_play)
-
-        played = set(n for p in to_play for n in p if results.record_games_for_agent(n))
-
-        new_results = {}
-        for agent_name in played:
-            with open(f"{results.agent_games_file_path(agent_name)}", "rb") as f:
-                new_results[agent_name] = f.read()
-        logger.info(f"Sending {len(new_results)} modified result files to the server.")
-        sq.put(new_results)
-
-        logger.info("Finished game-play round.")
+            updated_agents = update_user_agent_code(q_data)
+            logger.info(
+                f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
+            )
+    timer.cancel()
+    logger.info(f"Shutting down run_games gracefully.")
 
 
 def run_games_cluster(to_play):
