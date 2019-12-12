@@ -88,7 +88,9 @@ class GenMoveFailure(GenMoveResult):
         self.error_msg = error_msg
 
 
-def run_games_process(rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = True):
+def run_games_process(
+    rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = True
+):
     from itertools import product
     from queue import Empty as EmptyQueue
     from connectn.utils import update_user_agent_code, TOURNAMENT_FILE
@@ -189,7 +191,7 @@ def run_games_cluster(to_play):
     logger.info(f"Submitting games to the queue: {to_play}")
 
     for game_result in grid_map(
-        run_game_local,
+        run_single_game,
         to_play,
         mem_free="2G",
         name="conn4match",
@@ -207,13 +209,13 @@ def run_games_local(to_play):
 
     for g in to_play:
         try:
-            game_result = run_game_local(*g)
+            game_result = run_single_game(*g)
             results.add_game(game_result)
         except Exception:
             logger.exception("This should not happen, unless we are testing")
 
 
-def run_game_local(
+def run_single_game(
     agent_1: str, agent_2: str, game_seed: Optional[int] = None
 ) -> GameResult:
     """
@@ -235,6 +237,7 @@ def run_game_local(
     agent_name = agent_1
     results = {PLAYER1: AgentResult(agent_1), PLAYER2: AgentResult(agent_2)}
     gr = GameResult(results[PLAYER1], results[PLAYER2])
+    game_state = initialize_game_state()
 
     gen_move = {}
     for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
@@ -256,9 +259,12 @@ def run_game_local(
             logger.exception("Something has gone terribly wrong")
             raise e
 
+        if hasattr(agent_modules[agent_name], "initialize_agent"):
+            initialize_agent = getattr(agent_modules[agent_name], "initialize_agent")
+            if callable(initialize_agent):
+                initialize_agent(game_state.copy())
+
     loser_result = "LOSS"
-    game_state = initialize_game_state()
-    nth_move = 0
     try:
         logger.info(f"Playing game between {agent_1} and {agent_2}")
         moves_q = mp.Manager().Queue()
@@ -284,13 +290,12 @@ def run_game_local(
                     )
                     t0 = time.time()
                     ap.start()
-                    curr_max_time = 2 * MOVE_TIME_MAX if nth_move < 1 else MOVE_TIME_MAX
-                    ap.join(curr_max_time)
+                    ap.join(MOVE_TIME_MAX)
                     move_time = time.time() - t0
                     if ap.is_alive():
                         ap.terminate()
                         loser_result = "TIMEOUT"
-                        msg = f"Agent {agent_name} timed out after {curr_max_time} seconds ({move_time:.1f}s)."
+                        msg = f"Agent {agent_name} timed out after {MOVE_TIME_MAX} seconds ({move_time:.1f}s)."
                         raise AgentFailed(msg)
 
                 ret: Union[GenMoveSuccess, GenMoveFailure] = moves_q.get(block=True)
@@ -334,7 +339,6 @@ def run_game_local(
                 states[agent_name] = ret.state
                 if not playing:
                     break
-            nth_move += 1
 
         if end_state == IS_WIN:
             winner = player

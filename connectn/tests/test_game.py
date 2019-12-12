@@ -205,28 +205,28 @@ def test_generate_move_process(empty_board: np.ndarray):
     assert error_msg.endswith('raise Exception("Test failure")\n')
 
 
-def test_run_game_local():
-    from connectn.game import run_game_local
+def test_run_single_game():
+    from connectn.game import run_single_game
 
     try:
-        run_game_local("doesnotexist", "agent_rows")
+        run_single_game("doesnotexist", "agent_rows")
     except KeyError:
         pass
     else:
         assert False
 
-    gr = run_game_local("agent_rows", "agent_fail")
+    gr = run_single_game("agent_rows", "agent_fail")
     assert gr.winner == PLAYER1
     assert gr.result_1.outcome == "WIN" and gr.result_1.name == "agent_rows"
     assert gr.result_2.outcome == "FAIL" and gr.result_2.name == "agent_fail"
 
-    gr = run_game_local("agent_fail", "agent_rows")
+    gr = run_single_game("agent_fail", "agent_rows")
     assert gr.winner == PLAYER2
     assert gr.result_1.outcome == "FAIL" and gr.result_1.name == "agent_fail"
     assert gr.result_2.outcome == "WIN" and gr.result_2.name == "agent_rows"
 
     seed = 0
-    gr = run_game_local("agent_columns", "agent_rows", seed)
+    gr = run_single_game("agent_columns", "agent_rows", seed)
     assert gr.winner == PLAYER1
     assert gr.result_1.outcome == "WIN" and gr.result_2.outcome == "LOSS"
     assert gr.result_1.moves == [5, 5, 5, 5]
@@ -297,7 +297,7 @@ def test_run_games(monkeypatch):
             assert agent_name_archive_path in updated_agents
         return [agent_name for agent_name, _ in updated_agent_archives]
 
-    def mock_run_game(agent_names, agent_1, agent_2):
+    def mock_run_single_game(agent_names, agent_1, agent_2):
         assert agent_1 in agent_names or agent_2 in agent_names
         assert agent_1 != agent_2
         assert agent_1 in all_agents and agent_2 in all_agents
@@ -311,7 +311,7 @@ def test_run_games(monkeypatch):
     updated_agents_b = [("agent_columns", "no file"), ("agent_random", "no file")]
     for updated_agents in (updated_agents_a, updated_agents_b):
         agent_names = [agent_name for agent_name, _ in updated_agents]
-        monkeypatch.setattr(game, "run_game_local", partial(mock_run_game, agent_names))
+        monkeypatch.setattr(game, "run_single_game", partial(mock_run_single_game, agent_names))
         monkeypatch.setattr(
             utils,
             "update_user_agent_code",
