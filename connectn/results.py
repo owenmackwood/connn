@@ -6,7 +6,7 @@ import logging
 from tables import IsDescription, Int32Col, StringCol, Float64Col, BoolCol
 from connectn.utils import GAME_PROCESS_DATA_DIR
 from connectn.game import GameResult
-from typing import Iterable, List, Dict, Any, TypeVar, Union
+from typing import Iterable, List, Dict, Any, TypeVar, Union, Optional
 
 
 RESULTS_FILE_PATH = GAME_PROCESS_DATA_DIR / "results.h5"
@@ -83,6 +83,7 @@ class FullGameRow(IsDescription):
     agent1 = FullGameAgent()
     agent2 = FullGameAgent()
     when = TimeStamp()
+    winner = Int32Col()
 
 
 def initialize(agent_names: Iterable[str]) -> None:
@@ -104,7 +105,7 @@ def initialize(agent_names: Iterable[str]) -> None:
             add_agent(agent_name)
 
 
-def add_agent(agent_name: str) -> None:
+def add_agent(agent_name: str, file_path: Path = RESULTS_FILE_PATH) -> None:
     """
     Records a new version for agent `agent_name` by adding a row to the
     `/current` table, adding a new sub-group at `/agent_name/v<version_number>`
@@ -116,13 +117,14 @@ def add_agent(agent_name: str) -> None:
     ----------
     agent_name : str
         The name of the agent
+    file_path : Path, optional
     """
-    with tables.open_file(f"{RESULTS_FILE_PATH!s}", "a") as results_file:
+    with tables.open_file(f"{file_path!s}", "a") as results_file:
         _add_agent(results_file, agent_name)
         results_file.flush()
 
 
-def add_game(game_result: GameResult) -> None:
+def add_game(game_result: GameResult, file_path: Path = RESULTS_FILE_PATH) -> None:
     """
     Records the result of a game played between two agents.
     This includes updating the win/loss/draw count for the current agent
@@ -134,31 +136,48 @@ def add_game(game_result: GameResult) -> None:
     ----------
     game_result : GameResult
         Container object for all game data
+    file_path : Path, optional
     """
     agent_1_name = game_result.result_1.name
     agent_2_name = game_result.result_2.name
 
-    with tables.open_file(f"{RESULTS_FILE_PATH!s}", "a") as results_file:
+    with tables.open_file(f"{file_path!s}", "a") as results_file:
         _check_for_agent(results_file, agent_1_name)
         _check_for_agent(results_file, agent_2_name)
 
         agent_1_version = _get_current_agent_version(results_file, agent_1_name)
         agent_2_version = _get_current_agent_version(results_file, agent_2_name)
         if record_games_for_agent(agent_1_name):
-            _add_game_for_agent(
-                agent_1_name, agent_1_version, agent_2_version, game_result
-            )
+            with tables.open_file(
+                f"{agent_games_file_path(agent_1_name)!s}", "a"
+            ) as agent_file:
+                _add_game_for_agent(
+                    agent_file,
+                    agent_1_name,
+                    agent_1_version,
+                    agent_2_version,
+                    game_result,
+                )
         if record_games_for_agent(agent_2_name):
-            _add_game_for_agent(
-                agent_2_name, agent_2_version, agent_1_version, game_result
-            )
+            with tables.open_file(
+                f"{agent_games_file_path(agent_2_name)!s}", "a"
+            ) as agent_file:
+                _add_game_for_agent(
+                    agent_file,
+                    agent_2_name,
+                    agent_2_version,
+                    agent_1_version,
+                    game_result,
+                )
 
         _record_outcome(results_file, game_result, agent_1_version, agent_2_version)
 
         results_file.flush()
 
 
-def get_current_agent_version(agent_name: str) -> int:
+def get_current_agent_version(
+    agent_name: str, file_path: Path = RESULTS_FILE_PATH
+) -> int:
     """
     Retrieve the current version number of agent `agent_name`
 
@@ -166,18 +185,21 @@ def get_current_agent_version(agent_name: str) -> int:
     ----------
     agent_name : str
         Name of the agent being queried
+    file_path : Path, optional
 
     Returns
     -------
     version : int
         The current version of agent `agent_name`
     """
-    with tables.open_file(f"{RESULTS_FILE_PATH!s}", "r") as results_file:
+    with tables.open_file(f"{file_path!s}", "r") as results_file:
         version = _get_current_agent_version(results_file, agent_name)
     return version
 
 
-def get_agent_version_numbers(agent_name: str) -> List[int]:
+def get_agent_version_numbers(
+    agent_name: str, file_path: Path = RESULTS_FILE_PATH
+) -> List[int]:
     """
     Retrieve all version numbers for agent `agent_name`
     Versions are stored in the results file in the table `/agents/<agent_name>`
@@ -186,20 +208,21 @@ def get_agent_version_numbers(agent_name: str) -> List[int]:
     ----------
     agent_name : str
         Name of the agent being queried
+    file_path : Path, optional
 
     Returns
     -------
     versions : list of int
     """
     versions = []
-    with tables.open_file(f"{RESULTS_FILE_PATH!s}", "r") as results_file:
+    with tables.open_file(f"{file_path!s}", "r") as results_file:
         avt: tables.Table = results_file.get_node("/agents", agent_name)
         versions += avt.col("version").tolist()
     return versions
 
 
 def get_game_numbers_for_agent_version(
-    agent_name: str, agent_version: int
+    agent_name: str, agent_version: int, agent_file_path: Optional[Path] = None
 ) -> List[int]:
     """
     Retrieve the identifying number for every game played by
@@ -214,13 +237,18 @@ def get_game_numbers_for_agent_version(
         Name of the agent being queried
     agent_version :
         The version of the agent being queried
+    agent_file_path : Path, optional
 
     Returns
     -------
     game_numbers : list of int
     """
     game_numbers = []
-    fp = agent_games_file_path(agent_name)
+    fp = (
+        agent_games_file_path(agent_name)
+        if agent_file_path is None
+        else agent_file_path
+    )
     if fp.exists():
         with tables.open_file(f"{fp!s}", "r") as agent_file:
             try:
@@ -237,7 +265,10 @@ def get_game_numbers_for_agent_version(
 
 
 def get_game_for_agent(
-    agent_name: str, agent_version: int, game_number: int
+    agent_name: str,
+    agent_version: int,
+    game_number: int,
+    agent_file_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Retrieve the complete record of a single game.
@@ -252,6 +283,7 @@ def get_game_for_agent(
         The version of the agent being queried
     game_number : int
         The number identifying the game being queried
+    agent_file_path : Path, optional
 
     Returns
     -------
@@ -271,7 +303,12 @@ def get_game_for_agent(
                 stderr: list of str
     """
     game_info = {}
-    with tables.open_file(f"{agent_games_file_path(agent_name)!s}", "r") as agent_file:
+    fp = (
+        agent_games_file_path(agent_name)
+        if agent_file_path is None
+        else agent_file_path
+    )
+    with tables.open_file(f"{fp!s}", "r") as agent_file:
         vg = agent_file.get_node("/", _version_string(agent_version))
         gt: tables.Table = agent_file.get_node(vg, "games")
         game_result_cols = gt.colnames
@@ -321,6 +358,67 @@ def get_game_for_agent(
     return game_info
 
 
+AgentResult = Dict[str, Union[str, int, float]]
+GameSummary = Dict[str, Union[str, AgentResult]]
+
+
+def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSummary]:
+    """
+    Get a summary record of every game ever played.
+    GameSummaries are dictionaries structured like so:
+        `winner` : int
+            Whether agent1, agent2 or neither won the game
+        `when/time_str` : str
+            When the game was played (in a human readable format)
+        `when/time_sec` : float
+            When the game was played (in seconds since the Epoch)
+        `agent1` : AgentResult
+        `agent2` : AgentResult
+            Both AgentResults contain the following:
+                `name` : str
+                `version` : int
+                `rating` : float
+                `outcome` : str
+                `time_med` : float
+                `time_max` : float
+                `state_size_med` : float
+                `state_size_max` : float
+
+    Parameters
+    ----------
+    file_path : Path, optional
+
+    Returns
+    -------
+    all_games : list of GameSummary
+    """
+    time.time()
+    all_games = []
+    with tables.open_file(f"{file_path!s}", "r") as results_file:
+        agt = results_file.root.all_games
+        game = {}
+        for gr in agt:
+            game["when/time_str"] = gr["when/time_str"].decode()
+            game["when/time_sec"] = gr["when/time_sec"]
+            for i in (1, 2):
+                agent_result = {}
+                game[f"agent{i}"] = agent_result
+                for k in (
+                    "name",
+                    "version",
+                    "rating",
+                    "outcome",
+                    "time_med",
+                    "time_max",
+                    "state_size_med",
+                    "state_size_max",
+                ):
+                    val = gr[f"agent{i}/{k}"]
+                    agent_result[k] = val.decode() if isinstance(val, bytes) else val
+            all_games.append(game)
+    return all_games
+
+
 def _check_for_agent(results_file: tables.File, agent_name: str) -> None:
     """
     Check whether an agent exists in the `/current` table of the results
@@ -358,68 +456,72 @@ def record_games_for_agent(agent_name: str) -> bool:
 
 
 def _add_game_for_agent(
-    agent_name: str, agent_version: int, opponent_version: int, game_result: GameResult
+    agent_file: tables.File,
+    agent_name: str,
+    agent_version: int,
+    opponent_version: int,
+    game_result: GameResult,
 ) -> None:
     """
     Create a complete record of a game played by an agent.
 
     Parameters
     ----------
+    agent_file : tables.File
     agent_name : str
     agent_version : int
     opponent_version : int
     game_result : GameResult
     """
 
-    with tables.open_file(f"{agent_games_file_path(agent_name)!s}", "a") as agent_file:
-        ver_str = _version_string(agent_version)
-        gt: tables.Table
-        vg: tables.Group
-        try:
-            vg = agent_file.get_node("/", ver_str)
-        except tables.NoSuchNodeError:
-            vg = agent_file.create_group("/", ver_str)
-        try:
-            gt = agent_file.get_node(vg, "games")
-        except tables.NoSuchNodeError:
-            gt = agent_file.create_table(vg, "games", AgentGameOutcomeRow)
+    ver_str = _version_string(agent_version)
+    gt: tables.Table
+    vg: tables.Group
+    try:
+        vg = agent_file.get_node("/", ver_str)
+    except tables.NoSuchNodeError:
+        vg = agent_file.create_group("/", ver_str)
+    try:
+        gt = agent_file.get_node(vg, "games")
+    except tables.NoSuchNodeError:
+        gt = agent_file.create_table(vg, "games", AgentGameOutcomeRow)
 
-        result_1 = game_result.result_1
-        result_2 = game_result.result_2
-        game_number = gt.nrows
-        moved_first = agent_name == result_1.name
-        if moved_first:
-            result_agent = result_1
-            result_opponent = result_2
-        else:
-            result_agent = result_2
-            result_opponent = result_1
+    result_1 = game_result.result_1
+    result_2 = game_result.result_2
+    game_number = gt.nrows
+    moved_first = agent_name == result_1.name
+    if moved_first:
+        result_agent = result_1
+        result_opponent = result_2
+    else:
+        result_agent = result_2
+        result_opponent = result_1
 
-        opponent_name = result_opponent.name
-        gt_row = gt.row
-        gt_row["game_number"] = game_number
-        gt_row["opponent"] = opponent_name
-        gt_row["version"] = opponent_version
-        gt_row["moved_first"] = moved_first
-        gt_row["outcome"] = result_agent.outcome
-        gt_row["when/time_str"] = game_result.time_str
-        gt_row["when/time_sec"] = game_result.time_sec
+    opponent_name = result_opponent.name
+    gt_row = gt.row
+    gt_row["game_number"] = game_number
+    gt_row["opponent"] = opponent_name
+    gt_row["version"] = opponent_version
+    gt_row["moved_first"] = moved_first
+    gt_row["outcome"] = result_agent.outcome
+    gt_row["when/time_str"] = game_result.time_str
+    gt_row["when/time_sec"] = game_result.time_sec
 
-        gt_row.append()
+    gt_row.append()
 
-        game_number_str = _game_string(game_number)
-        gg = agent_file.create_group(vg, game_number_str)
+    game_number_str = _game_string(game_number)
+    gg = agent_file.create_group(vg, game_number_str)
 
-        for n in ("moves", "move_times"):
-            _add_array(agent_file, gg, n, getattr(result_1, n), getattr(result_2, n))
+    for n in ("moves", "move_times"):
+        _add_array(agent_file, gg, n, getattr(result_1, n), getattr(result_2, n))
 
-        _add_array(agent_file, gg, "state_size", result_agent.state_size)
-        _add_array(agent_file, gg, "seeds", result_agent.seeds)
+    _add_array(agent_file, gg, "state_size", result_agent.state_size)
+    _add_array(agent_file, gg, "seeds", result_agent.seeds)
 
-        for n in ("stdout", "stderr"):
-            _add_vlarray(agent_file, gg, n, getattr(result_agent, n))
+    for n in ("stdout", "stderr"):
+        _add_vlarray(agent_file, gg, n, getattr(result_agent, n))
 
-        agent_file.flush()
+    agent_file.flush()
 
 
 def _add_agent(results_file: tables.File, agent_name: str) -> None:
@@ -535,6 +637,7 @@ def _record_outcome(
     except:
         agt = results_file.create_table("/", "all_games", FullGameRow)
     gr = agt.row
+    gr["winner"] = game_result.winner
     gr["when/time_str"] = game_result.time_str
     gr["when/time_sec"] = game_result.time_sec
     for i, result in enumerate((game_result.result_1, game_result.result_2), 1):
@@ -678,12 +781,27 @@ def _game_string(game_number: int) -> str:
 if __name__ == "__main__":
     from connectn.users import agents
 
-    for an in agents():
-        agent_versions = get_agent_version_numbers(an)
-        for av in agent_versions:
-            print(f"{an} version: {av}")
-            for gn in get_game_numbers_for_agent_version(an, av):
-                print(f"{an} version {av}, game number: {gn}")
-                print(get_game_for_agent(an, av, gn))
-        if not agent_versions:
-            print(f"No agent versions for {an}")
+    show_summary = True
+    if show_summary:
+        # Example of how to get the summary record of all games
+        for game in get_all_game_summaries():
+            for i in (1, 2):
+                result = game[f"agent{i}"]
+                if "group_a" == result["name"]:
+                    print(
+                        f"{game['when/time_str']} ({game['when/time_sec']} seconds since the Epoch)"
+                    )
+                    print(result)
+
+    show_details = False
+    if show_details:
+        # Example of how to retrieve detailed records of games
+        for an in agents():
+            agent_versions = get_agent_version_numbers(an)
+            for av in agent_versions:
+                print(f"{an} version: {av}")
+                for gn in get_game_numbers_for_agent_version(an, av):
+                    print(f"{an} version {av}, game number: {gn}")
+                    print(get_game_for_agent(an, av, gn))
+            if not agent_versions:
+                print(f"No agent versions for {an}")
