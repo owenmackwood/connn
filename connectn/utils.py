@@ -105,8 +105,8 @@ def parse_arguments():
     parser.add_argument(
         "--playall",
         help="Play all possible matches on startup.",
-        type=bool,
-        default=PLAY_ALL,
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
 
