@@ -68,7 +68,7 @@ class AgentGameOutcomeRow(IsDescription):
     when = TimeStamp()
 
 
-class FullGameAgent(IsDescription):
+class GameSummaryAgent(IsDescription):
     name = StringCol(name_size, pos=0)
     version = Int32Col(pos=1)
     rating = Float64Col(pos=2, dflt=0.0)
@@ -79,9 +79,9 @@ class FullGameAgent(IsDescription):
     state_size_max = Int32Col(pos=6)
 
 
-class FullGameRow(IsDescription):
-    agent1 = FullGameAgent()
-    agent2 = FullGameAgent()
+class GameSummaryRow(IsDescription):
+    agent1 = GameSummaryAgent()
+    agent2 = GameSummaryAgent()
     when = TimeStamp()
     winner = Int32Col()
 
@@ -358,8 +358,8 @@ def get_game_for_agent(
     return game_info
 
 
-AgentResult = Dict[str, Union[str, int, float]]
-GameSummary = Dict[str, Union[str, AgentResult]]
+AgentSummary = Dict[str, Union[str, int, float]]
+GameSummary = Dict[str, Union[str, AgentSummary]]
 
 
 def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSummary]:
@@ -372,8 +372,8 @@ def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSumm
             When the game was played (in a human readable format)
         `when/time_sec` : float
             When the game was played (in seconds since the Epoch)
-        `agent1` : AgentResult
-        `agent2` : AgentResult
+        `agent1` : AgentSummary
+        `agent2` : AgentSummary
             Both AgentResults contain the following:
                 `name` : str
                 `version` : int
@@ -638,7 +638,7 @@ def _record_outcome(
     try:
         agt = results_file.root.all_games
     except tables.NoSuchNodeError:
-        agt = results_file.create_table("/", "all_games", FullGameRow)
+        agt = results_file.create_table("/", "all_games", GameSummaryRow)
     gr = agt.row
     gr["winner"] = game_result.winner
     gr["when/time_str"] = game_result.time_str
