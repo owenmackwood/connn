@@ -795,7 +795,7 @@ if __name__ == "__main__":
     show_summary = True
     if show_summary:
         # Example of how to get the summary record of all games
-        path = Path("~/tournament/all_games-2019-12-12-14h02m18s.h5").expanduser()
+        path = Path.home() / "tournament" / "all_games-2019-12-12-18h17m33s.h5"
         games = get_all_game_summaries(path)
         for g in games:
             for j in (1, 2):

@@ -237,7 +237,6 @@ def run_single_game(
     agent_name = agent_1
     results = {PLAYER1: AgentResult(agent_1), PLAYER2: AgentResult(agent_2)}
     gr = GameResult(results[PLAYER1], results[PLAYER2])
-    game_state = initialize_game_state()
 
     gen_move = {}
     for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
@@ -259,10 +258,12 @@ def run_single_game(
             logger.exception("Something has gone terribly wrong")
             raise e
 
-        if hasattr(agent_modules[agent_name], "initialize_agent"):
-            initialize_agent = getattr(agent_modules[agent_name], "initialize_agent")
-            if callable(initialize_agent):
-                initialize_agent(game_state.copy())
+    game_state = initialize_game_state()
+    for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
+        try:
+            gen_move[agent_name](game_state.copy(), player, None)
+        except Exception:
+            pass
 
     loser_result = "LOSS"
     try:
