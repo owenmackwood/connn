@@ -396,13 +396,16 @@ def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSumm
     all_games = []
     with tables.open_file(f"{file_path!s}", "r") as results_file:
         agt = results_file.root.all_games
-        game = {}
         for gr in agt:
-            game["when/time_str"] = gr["when/time_str"].decode()
-            game["when/time_sec"] = gr["when/time_sec"]
+            game = {
+                "winner": gr["winner"],
+                "when/time_str": gr["when/time_str"].decode(),
+                "when/time_sec": gr["when/time_sec"],
+                "agent1": {},
+                "agent2": {},
+            }
             for i in (1, 2):
-                agent_result = {}
-                game[f"agent{i}"] = agent_result
+                agent_result = game[f"agent{i}"]
                 for k in (
                     "name",
                     "version",
@@ -634,7 +637,7 @@ def _record_outcome(
     agt: tables.Table
     try:
         agt = results_file.root.all_games
-    except:
+    except tables.NoSuchNodeError:
         agt = results_file.create_table("/", "all_games", FullGameRow)
     gr = agt.row
     gr["winner"] = game_result.winner
@@ -784,14 +787,16 @@ if __name__ == "__main__":
     show_summary = True
     if show_summary:
         # Example of how to get the summary record of all games
-        for game in get_all_game_summaries():
-            for i in (1, 2):
-                result = game[f"agent{i}"]
-                if "group_a" == result["name"]:
+        path = Path("~/tournament/all_games-2019-12-12-14h02m18s.h5").expanduser()
+        games = get_all_game_summaries(path)
+        for g in games:
+            for j in (1, 2):
+                res = g[f"agent{j}"]
+                if res["outcome"] not in ("WIN", "LOSS", "DRAW"):
                     print(
-                        f"{game['when/time_str']} ({game['when/time_sec']} seconds since the Epoch)"
+                        f"{g['when/time_str']} ({g['when/time_sec']} seconds since the Epoch)"
                     )
-                    print(result)
+                    print(res["name"], res["outcome"])
 
     show_details = False
     if show_details:
