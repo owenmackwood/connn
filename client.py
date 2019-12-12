@@ -55,17 +55,19 @@ def connect():
     from connectn.utils import LISTEN_PORT
 
     upload = False
-    inp = input("Upload agent or download results? u / [d] ").lower()
+    prompt = "Upload agent or download results? u / [d] "
+    inp = input(prompt).lower()
     while inp not in ("", "u", "d"):
-        inp = input().lower()
+        inp = input(prompt).lower()
     if inp == "u":
         upload = True
 
     download_agent = False
     if not upload:
-        inp = input("Download tournament or agent file? t / [a] ").lower()
+        prompt = "Download tournament or agent file? t / [a] "
+        inp = input(prompt).lower()
         while inp not in ("", "t", "a"):
-            inp = input().lower()
+            inp = input(prompt).lower()
         download_agent = inp != "t"
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as cs:
