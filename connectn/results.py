@@ -73,10 +73,11 @@ class GameSummaryAgent(IsDescription):
     version = Int32Col(pos=1)
     rating = Float64Col(pos=2, dflt=0.0)
     outcome = StringCol(outcome_size, pos=3)
-    time_med = Float64Col(pos=4)
-    time_max = Float64Col(pos=5)
-    state_size_med = Int32Col(pos=6)
-    state_size_max = Int32Col(pos=6)
+    total_time = Float64Col(pos=4)
+    time_med = Float64Col(pos=5)
+    time_max = Float64Col(pos=6)
+    state_size_med = Int32Col(pos=7)
+    state_size_max = Int32Col(pos=8)
 
 
 class GameSummaryRow(IsDescription):
@@ -382,6 +383,7 @@ def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSumm
                 `version` : int
                 `rating` : float
                 `outcome` : str
+                `total_time` : float
                 `time_med` : float
                 `time_max` : float
                 `state_size_med` : float
@@ -415,6 +417,7 @@ def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSumm
                     "version",
                     "rating",
                     "outcome",
+                    "total_time",
                     "time_med",
                     "time_max",
                     "state_size_med",
@@ -657,9 +660,11 @@ def _record_outcome(
         gr[f"agent{i}/rating"] = 0.0
         gr[f"agent{i}/outcome"] = result.outcome
         if result.move_times:
+            gr[f"agent{i}/total_time"] = np.sum(result.move_times)
             gr[f"agent{i}/time_med"] = np.median(result.move_times)
             gr[f"agent{i}/time_max"] = np.max(result.move_times)
         else:
+            gr[f"agent{i}/total_time"] = -1
             gr[f"agent{i}/time_med"] = -1
             gr[f"agent{i}/time_max"] = -1
         if result.state_size:
