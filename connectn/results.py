@@ -84,6 +84,7 @@ class GameSummaryRow(IsDescription):
     agent2 = GameSummaryAgent()
     when = TimeStamp()
     winner = Int32Col()
+    moves = Int32Col()
 
 
 def initialize(agent_names: Iterable[str]) -> None:
@@ -368,6 +369,8 @@ def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSumm
     GameSummaries are dictionaries structured like so:
         `winner` : int
             Whether agent1, agent2 or neither won the game
+        `moves` : int
+            Number of moves in the game
         `when/time_str` : str
             When the game was played (in a human readable format)
         `when/time_sec` : float
@@ -399,6 +402,7 @@ def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSumm
         for gr in agt:
             game = {
                 "winner": gr["winner"],
+                "moves": gr["moves"],
                 "when/time_str": gr["when/time_str"].decode(),
                 "when/time_sec": gr["when/time_sec"],
                 "agent1": {},
@@ -606,12 +610,14 @@ def _record_outcome(
     """
     Record the outcome of a single game for both agents that participated
     in it. More specifically, this function increments the number of
-    wins / losses / draws / failures for the two agents.
+    wins / losses / draws / failures for the two agents, and then records
+    a summary of the game in the `all_games` table.
 
     Parameters
     ----------
-    results_file :
-    game_result :
+    results_file : tables.File
+    game_result : GameResult
+    agent_version : list of int
     """
     for result in (game_result.result_1, game_result.result_2):
         agent_name = result.name
@@ -634,6 +640,7 @@ def _record_outcome(
             row.update()
         vt.flush()
 
+    result_1, result_2 = game_result.result_1, game_result.result_2
     agt: tables.Table
     try:
         agt = results_file.root.all_games
@@ -641,9 +648,10 @@ def _record_outcome(
         agt = results_file.create_table("/", "all_games", GameSummaryRow)
     gr = agt.row
     gr["winner"] = game_result.winner
+    gr["moves"] = len(result_1.moves) + len(result_2.moves)
     gr["when/time_str"] = game_result.time_str
     gr["when/time_sec"] = game_result.time_sec
-    for i, result in enumerate((game_result.result_1, game_result.result_2), 1):
+    for i, result in enumerate((result_1, result_2), 1):
         gr[f"agent{i}/name"] = result.name
         gr[f"agent{i}/version"] = agent_version[i - 1]
         gr[f"agent{i}/rating"] = 0.0
