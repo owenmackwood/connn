@@ -4,11 +4,12 @@ import tables
 import numpy as np
 import logging
 from tables import IsDescription, Int32Col, StringCol, Float64Col, BoolCol
-from connectn.utils import DATA_DIR
+from connectn.utils import GAME_PROCESS_DATA_DIR
 from connectn.game import GameResult
 from typing import Iterable, List, Dict, Any, TypeVar, Union
 
-RESULTS_FILE_PATH = DATA_DIR / "results.h5"
+
+RESULTS_FILE_PATH = GAME_PROCESS_DATA_DIR / "results.h5"
 name_size = 32
 outcome_size = 16
 compression_filter = tables.Filters(complevel=5, complib="zlib")
@@ -86,8 +87,6 @@ class FullGameRow(IsDescription):
 
 def initialize(agent_names: Iterable[str]) -> None:
     if not RESULTS_FILE_PATH.exists():
-        if not DATA_DIR.exists():
-            DATA_DIR.mkdir()
         agent_names = list(agent_names)
         t_str = time.ctime()
         t_sec = time.time()
@@ -643,7 +642,7 @@ def agent_games_file_path(agent_name) -> Path:
     -------
     Path
     """
-    return DATA_DIR / f"{agent_name}.h5"
+    return GAME_PROCESS_DATA_DIR / f"{agent_name}.h5"
 
 
 def _version_string(agent_version: int) -> str:

@@ -10,18 +10,21 @@ import platform
 
 LISTEN_PORT = 2323
 ARCHIVE_FORMAT = "tar"
-DATA_DIR: Path = Path.home() / "tournament"
-KEY_SALT_FILE: Path = DATA_DIR / "keys_salts"
-LOG_FILE: Path = DATA_DIR / "server.log"
-TEMP_DIR: Path = DATA_DIR / "tmp"
+ROOT_DATA_DIR: Path = Path.home() / "tournament"
+LOG_FILE: Path = ROOT_DATA_DIR / "server.log"
+SERVER_PROCESS_DATA_DIR: Path = ROOT_DATA_DIR / "server_process"
+KEY_SALT_FILE: Path = SERVER_PROCESS_DATA_DIR / "keys_salts"
+GAME_PROCESS_DATA_DIR: Path = ROOT_DATA_DIR / "game_process"
+TEMP_DIR: Path = GAME_PROCESS_DATA_DIR / "tmp"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
 ON_CLUSTER = platform.node() == "cluster"
 LOG_LEVEL = "INFO"
 PLAY_ALL = False
+TOURNAMENT_FILE = "all_games"
 
-if not DATA_DIR.exists():
-    DATA_DIR.mkdir()
+if not ROOT_DATA_DIR.exists():
+    ROOT_DATA_DIR.mkdir()
 
 
 class SavedState:
@@ -185,9 +188,13 @@ def update_user_agent_code(updated_agent_archives: List[Tuple[str, str]]) -> Lis
     from connectn import results
     import connectn.agents as cna
     import shutil
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     for agent_name, archive_path in updated_agent_archives:
         module_path = os.path.join(cna.__path__[0], agent_name)
+        logger.info(f"Writing module files for {agent_name} to {module_path}")
         if os.path.exists(module_path):
             shutil.rmtree(module_path)
         os.makedirs(module_path)

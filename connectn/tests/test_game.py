@@ -268,10 +268,10 @@ def test_run_game_cluster(monkeypatch):
 
 def test_run_games(monkeypatch):
     from connectn import results, utils, game
-    from connectn.game import run_games
+    from connectn.game import run_games_process
     from connectn.users import agents
     from connectn.game import GameResult, AgentResult
-    from multiprocessing import Queue
+    from multiprocessing import Queue, Event
     from functools import partial
 
     all_agents = agents()
@@ -305,6 +305,7 @@ def test_run_games(monkeypatch):
 
     sq = Queue()
     rq = Queue()
+    ev = Event()
     updated_agents_a = [("agent_rows", "no file")]
 
     updated_agents_b = [("agent_columns", "no file"), ("agent_random", "no file")]
@@ -318,9 +319,6 @@ def test_run_games(monkeypatch):
         )
 
         sq.put(updated_agents)
-        sq.put("SHUTDOWN")
-        run_games(sq, rq, play_all=False)
-        try:
-            rq.get()
-        except:
-            pass
+        ev.set()
+        run_games_process(sq, rq, ev, play_all=False)
+

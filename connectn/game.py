@@ -88,12 +88,18 @@ class GenMoveFailure(GenMoveResult):
         self.error_msg = error_msg
 
 
-def run_games(rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = True):
+def run_games_process(rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = True):
     from itertools import product
     from queue import Empty as EmptyQueue
-    from connectn.utils import update_user_agent_code
+    from connectn.utils import update_user_agent_code, TOURNAMENT_FILE
+    from connectn.results import RESULTS_FILE_PATH, GAME_PROCESS_DATA_DIR
     from connectn import results
     from threading import Timer, Event
+
+    logger.info("Started run_games_process.")
+
+    if not GAME_PROCESS_DATA_DIR.exists():
+        GAME_PROCESS_DATA_DIR.mkdir()
 
     repetitions = 1
     run_all_after = 60 * 60  # Run all-against-all every 60 minutes
@@ -106,6 +112,7 @@ def run_games(rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = T
         logger.info(f"Just started, running all-against-all once.")
         updated_agents = list(agents())
     else:
+        logger.info("Skipping all-against-all.")
         updated_agents = []
 
     time_to_play_all = Event()
@@ -139,6 +146,8 @@ def run_games(rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = T
             for agent_name in played:
                 with open(f"{results.agent_games_file_path(agent_name)}", "rb") as f:
                     new_results[agent_name] = f.read()
+            with open(f"{RESULTS_FILE_PATH!s}", "rb") as f:
+                new_results[TOURNAMENT_FILE] = f.read()
             logger.info(
                 f"Sending {len(new_results)} modified result files to the server."
             )
@@ -161,6 +170,7 @@ def run_games(rq: mp.Queue, sq: mp.Queue, shutdown: mp.Event, play_all: bool = T
             logger.info(
                 f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
             )
+
     timer.cancel()
     logger.info(f"Shutting down run_games gracefully.")
 

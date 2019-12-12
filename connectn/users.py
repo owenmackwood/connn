@@ -66,7 +66,7 @@ def generate_users(num_users: int, pw_length: int = 8, append: bool = True):
     import string
     from pathlib import Path
 
-    user_pw_plain = Path.home() / "ppp_user_passwords.txt"
+    user_pw_plain = Path.home() / "users_passwords.txt"
 
     n_users = 0
     new_users_key_salt = {}
@@ -89,11 +89,11 @@ def generate_users(num_users: int, pw_length: int = 8, append: bool = True):
         new_users_pw[user] = pw
         new_users_key_salt[user] = key, salt
 
-    with open(user_pw_plain, "a" if append else "w") as f:
+    with open(f"{user_pw_plain!s}", "a" if append else "w") as f:
         for user, pw in new_users_pw.items():
             f.write(f"{user} {pw}\n")
 
-    with open(KEY_SALT_FILE, "wb") as f:
+    with open(f"{KEY_SALT_FILE!s}", "wb") as f:
         pickle.dump(new_users_key_salt, f)
 
 
