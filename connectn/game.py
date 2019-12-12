@@ -635,7 +635,9 @@ def human_vs_agent(generate_move: GenMove):
         while playing:
             gen_moves = (generate_move, user_move)[::play_first]
             for player, gen_move in zip((PLAYER1, PLAYER2), gen_moves):
+                t0 = time.time()
                 action, saved_state = gen_move(board.copy(), player, saved_state)
+                print(f"Move time: {time.time() - t0:.3f}s")
                 apply_player_action(board, action, player)
                 end_state = check_end_state(board, player)
                 if end_state != STILL_PLAYING:

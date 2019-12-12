@@ -2,10 +2,12 @@ import argparse
 from pathlib import Path
 from connectn.utils import ComfyStockings
 
-group_name = "group_a"
-password = "rgIWtVRp"
-module_location = Path("~/codebase/connn/connectn/agents/agent_mcts")
+
 results_location = Path.home() / "tournament"
+module_location = Path.home() / "codebase/connn/connectn/agents/agent_fail"
+group_name = ""
+password = ""
+
 
 if not results_location.exists():
     results_location.mkdir()
@@ -52,7 +54,7 @@ def exclude_files(tarinfo):
 
 def connect():
     import socket
-    from connectn.utils import LISTEN_PORT
+    from connectn.utils import LISTEN_PORT, PROTOCOL_VERSION
 
     upload = False
     prompt = "Upload agent or download results? u / [d] "
@@ -74,6 +76,11 @@ def connect():
         cs.connect(("localhost", LISTEN_PORT))
         with ComfyStockings(cs) as scs:
             scs.handshake_wait()
+
+            scs.write(f"{PROTOCOL_VERSION:03}")
+            msg = scs.read_wait()
+            if "OK" != msg:
+                raise Exception(f"You need to update your client: {msg}")
 
             print("Sending authentication request.")
             scs.write(f"{group_name},{password}")

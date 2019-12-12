@@ -9,6 +9,7 @@ from pathlib import Path
 import platform
 
 LISTEN_PORT = 2323
+PROTOCOL_VERSION = 1
 ARCHIVE_FORMAT = "tar"
 ROOT_DATA_DIR: Path = Path.home() / "tournament"
 LOG_FILE: Path = ROOT_DATA_DIR / "server.log"

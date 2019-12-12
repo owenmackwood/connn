@@ -103,30 +103,41 @@ def results_file_name_local(file_name: str) -> Path:
 def handle_client(cs: socket.socket, updated_agent_archives: list):
     from time import sleep
     from connectn.users import authenticate_user
+    from connectn.utils import PROTOCOL_VERSION
 
     logger = logging.getLogger(__name__)
 
     with ComfyStockings(cs) as scs:
         scs.handshake_wait()
 
-        uid_pw = scs.read_wait().split(",")
-        logger.info(f"Authentication attempt by: {uid_pw[0]}")
-        login_valid = len(uid_pw) == 2 and authenticate_user(*uid_pw)
-        msg = "OK" if login_valid else "FAIL"
-        scs.write(msg)
-        if login_valid:
-            logger.info("Authentication successful.")
-            # User is prompted to choose upload or download
-            up_or_down = scs.read_wait()
-            if up_or_down == "UPLOAD":
-                msg = handle_upload(scs, uid_pw[0], updated_agent_archives)
-            elif up_or_down == "DOWNLOAD":
-                msg = handle_download(scs, uid_pw[0])
-            else:
-                msg = "FAIL"
-            scs.write(msg)
+        try:
+            client_protocol = int(scs.read_wait())
+        except ValueError:
+            client_protocol = -1
+
+        if client_protocol < PROTOCOL_VERSION:
+            scs.write("PROTOCOL VERSION FAILURE")
         else:
-            logger.info("Authentication failed.")
+            scs.write("OK")
+
+            uid_pw = scs.read_wait().split(",")
+            logger.info(f"Authentication attempt by: {uid_pw[0]}")
+            login_valid = len(uid_pw) == 2 and authenticate_user(*uid_pw)
+            msg = "OK" if login_valid else "FAIL"
+            scs.write(msg)
+            if login_valid:
+                logger.info("Authentication successful.")
+                # User is prompted to choose upload or download
+                up_or_down = scs.read_wait()
+                if up_or_down == "UPLOAD":
+                    msg = handle_upload(scs, uid_pw[0], updated_agent_archives)
+                elif up_or_down == "DOWNLOAD":
+                    msg = handle_download(scs, uid_pw[0])
+                else:
+                    msg = "FAIL"
+                scs.write(msg)
+            else:
+                logger.info("Authentication failed.")
 
         sleep(0.5)
         while scs.active:
