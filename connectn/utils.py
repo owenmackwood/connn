@@ -124,7 +124,7 @@ def parse_arguments():
     MOVE_TIME_MAX = args.maxtime
     STATE_MEMORY_MAX = int(np.round(STATE_MEMORY_MAX * args.maxsize))
     PLAY_ALL = args.playall
-    RUN_ALL_EVERY = args.period
+    RUN_ALL_EVERY = args.schedule
 
 
 def configure_logging():
