@@ -618,25 +618,36 @@ def check_end_state(
     return STILL_PLAYING
 
 
-def human_vs_agent(generate_move: GenMove):
-    def user_move(board, player, saved_state):
-        print(pretty_print_board(board))
-        col = -1
-        while not 0 <= col < board.shape[1]:
-            try:
-                col = int(input(f'Playing {"X" if player == 1 else "O"}, Col? '))
-            except:
-                pass
-        return col, saved_state
+def user_move(board, player, saved_state):
+    col = -1
+    while not 0 <= col < board.shape[1]:
+        try:
+            col = int(input(f"Col? "))
+        except:
+            pass
+    return col, saved_state
 
+
+def human_vs_agent(
+    generate_move_1: GenMove,
+    generate_move_2: GenMove = user_move,
+    player_1: str = "Player 1",
+    player_2: str = "Player 2",
+):
     for play_first in (1, -1):
         saved_state = None
         board = initialize_game_state()
         playing = True
         while playing:
-            gen_moves = (generate_move, user_move)[::play_first]
-            for player, gen_move in zip((PLAYER1, PLAYER2), gen_moves):
+            gen_moves = (generate_move_1, generate_move_2)[::play_first]
+            for player, player_name, gen_move in zip(
+                (PLAYER1, PLAYER2), (player_1, player_2), gen_moves
+            ):
                 t0 = time.time()
+                print(pretty_print_board(board))
+                print(
+                    f'{player_name} you are playing with {"X" if player == 1 else "O"}'
+                )
                 action, saved_state = gen_move(board.copy(), player, saved_state)
                 print(f"Move time: {time.time() - t0:.3f}s")
                 apply_player_action(board, action, player)
@@ -646,7 +657,9 @@ def human_vs_agent(generate_move: GenMove):
                     if end_state == IS_DRAW:
                         print("Game ended in draw")
                     else:
-                        print(f'Player {"X" if player == PLAYER1 else "O"} won')
+                        print(
+                            f'{player_name} won playing {"X" if player == PLAYER1 else "O"}'
+                        )
                     playing = False
                     break
 

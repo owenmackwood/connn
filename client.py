@@ -107,7 +107,7 @@ def handle_upload(scs: ComfyStockings):
 
     with tempfile.NamedTemporaryFile() as tar_file:
         with tarfile.open(tar_file.name, "w") as tar:
-            for fn in os.listdir(module_location):
+            for fn in os.listdir(f"{module_location!s}"):
                 tar.add(module_location / fn, fn, filter=exclude_files)
         fs = f"{os.path.getsize(tar_file.name)!s}"
         print(f"Bytes to send: {fs}")

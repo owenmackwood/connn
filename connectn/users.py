@@ -23,7 +23,7 @@ def agents() -> List[str]:
         "agent_columns",
         "agent_rows",
         # "agent_mcts",
-        # "agent_mmab",
+        "agent_mmab",
         "agent_fail",
     ]
     agent_names = builtin_agents + list(load_user_auth().keys())
