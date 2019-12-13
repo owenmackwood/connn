@@ -93,7 +93,7 @@ def run_games_process(
 ):
     from itertools import product
     from queue import Empty as EmptyQueue
-    from connectn.utils import update_user_agent_code, TOURNAMENT_FILE
+    from connectn.utils import update_user_agent_code, TOURNAMENT_FILE, RUN_ALL_EVERY
     from connectn.results import RESULTS_FILE_PATH, GAME_PROCESS_DATA_DIR
     from connectn import results
     from threading import Timer, Event
@@ -104,7 +104,9 @@ def run_games_process(
         GAME_PROCESS_DATA_DIR.mkdir()
 
     repetitions = 1
-    run_all_after = 60 * 60  # Run all-against-all every 60 minutes
+    run_all_after = (
+        60.0 * 60 * RUN_ALL_EVERY
+    )  # Run all-against-all every RUN_ALL_EVERY hours
     block_time = 1
 
     agent_modules = import_agents({})

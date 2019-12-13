@@ -19,6 +19,7 @@ GAME_PROCESS_DATA_DIR: Path = ROOT_DATA_DIR / "game_process"
 TEMP_DIR: Path = GAME_PROCESS_DATA_DIR / "tmp"
 MOVE_TIME_MAX = 20.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
+RUN_ALL_EVERY = 6  # Only rerun every six hours
 ON_CLUSTER = platform.node() == "cluster"
 LOG_LEVEL = "INFO"
 PLAY_ALL = False
@@ -74,7 +75,7 @@ class ComfyStockings(Stockings.Stocking):
 def parse_arguments():
     import argparse
 
-    global LOG_LEVEL, MOVE_TIME_MAX, LOG_FILE, STATE_MEMORY_MAX, PLAY_ALL
+    global LOG_LEVEL, MOVE_TIME_MAX, LOG_FILE, STATE_MEMORY_MAX, PLAY_ALL, RUN_ALL_EVERY
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
@@ -109,6 +110,13 @@ def parse_arguments():
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--schedule",
+        help="Number of hours to wait before re-running tournament.",
+        type=int,
+        default=RUN_ALL_EVERY,
+    )
+
     args = parser.parse_args()
 
     LOG_FILE = Path(args.logfile).expanduser()
@@ -116,6 +124,7 @@ def parse_arguments():
     MOVE_TIME_MAX = args.maxtime
     STATE_MEMORY_MAX = int(np.round(STATE_MEMORY_MAX * args.maxsize))
     PLAY_ALL = args.playall
+    RUN_ALL_EVERY = args.period
 
 
 def configure_logging():
