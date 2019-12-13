@@ -642,8 +642,9 @@ def human_vs_agent(
         playing = True
         while playing:
             gen_moves = (generate_move_1, generate_move_2)[::play_first]
+            player_names = (player_1, player_2)[::play_first]
             for player, player_name, gen_move in zip(
-                (PLAYER1, PLAYER2), (player_1, player_2), gen_moves
+                (PLAYER1, PLAYER2), player_names, gen_moves
             ):
                 t0 = time.time()
                 print(pretty_print_board(board))
