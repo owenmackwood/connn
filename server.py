@@ -203,7 +203,7 @@ def handle_download(scs: ComfyStockings, username: str) -> str:
         scs.write(f"{file_size!s}")
         with open(f"{results_path!s}", "rb") as f:
             scs.write(f.read())
-        msg = scs.read_wait()
+        msg = scs.read_wait(timeout=60.)
         if msg == "OK":
             logger.info(f"User {username} successfully received results file.")
         else:

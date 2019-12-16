@@ -115,7 +115,7 @@ def handle_upload(scs: ComfyStockings):
         with open(tar_file.name, "rb") as f:
             scs.write(f.read())
 
-    msg = scs.read_wait()
+    msg = scs.read_wait(timeout=60.)
     print(f"Agent upload: {msg}")
 
 
