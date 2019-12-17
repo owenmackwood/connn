@@ -170,10 +170,13 @@ def run_games_process(
                 updated_agents = list(agents())
                 logger.info("Timed to run all-against-all.")
         else:
-            updated_agents = update_user_agent_code(q_data)
-            logger.info(
-                f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
-            )
+            if isinstance(q_data, str) and q_data == "PLAY_ALL":
+                updated_agents = list(agents())
+                msg = "Received request to play all-against-all."
+            else:
+                updated_agents = update_user_agent_code(q_data)
+                msg = f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
+            logger.info(msg)
 
     timer.cancel()
     logger.info(f"Shutting down run_games gracefully.")

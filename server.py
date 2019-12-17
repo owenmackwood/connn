@@ -58,8 +58,18 @@ def run_server():
                 except InactiveSocket:
                     logger.exception("Connection failed")
                 except KeyboardInterrupt:
-                    logger.info("KeyboardInterrupt: Shutting down")
-                    running = False
+                    inp = input("Shutdown? y/[n] ").lower()
+                    while inp not in ("", "y", "n"):
+                        inp = input("Shutdown? y/[n] ").lower()
+                    if inp == "y":
+                        logger.info("KeyboardInterrupt: Shutting down")
+                        running = False
+                    else:
+                        inp = input("Play all games? y/[n] ").lower()
+                        while inp not in ("", "y", "n"):
+                            inp = input("Play all games? y/[n] ").lower()
+                        if inp == "y":
+                            sq.put("PLAY_ALL")
                 except Exception:
                     logger.exception("Unexpected error, will try to keep running.")
 
