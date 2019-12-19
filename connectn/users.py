@@ -22,7 +22,7 @@ def agents() -> List[str]:
         "agent_random",
         "agent_columns",
         "agent_rows",
-        # "agent_mcts",
+        "agent_mcts",
         "agent_mmab",
         "agent_fail",
     ]
