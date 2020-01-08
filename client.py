@@ -125,7 +125,7 @@ def handle_download(scs: ComfyStockings, download_agent: bool):
     scs.write("AGENT" if download_agent else "TOURNAMENT")
 
     file_time = scs.read_wait()
-    file_name =  "-".join((group_name if download_agent else TOURNAMENT_FILE, file_time))
+    file_name = "-".join((group_name if download_agent else TOURNAMENT_FILE, file_time))
     file_path = (results_location / file_name).with_suffix(".h5")
 
     if file_path.exists():
@@ -138,7 +138,7 @@ def handle_download(scs: ComfyStockings, download_agent: bool):
         scs.write("GO")
         bytes_expected = int(scs.read_wait())
         print(f"Now starting transfer of {bytes_expected} bytes")
-        data = scs.read_wait()
+        data = scs.read_wait(delay=1., timeout=600.)
         bytes_received = len(data)
         print(f"Received bytes {bytes_received}, expected {bytes_expected}")
         msg = "FAIL"
