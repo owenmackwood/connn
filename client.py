@@ -72,29 +72,31 @@ def connect():
             inp = input(prompt).lower()
         download_agent = inp != "t"
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as cs:
-        cs.connect(("localhost", LISTEN_PORT))
-        with ComfyStockings(cs) as scs:
-            scs.handshake_wait()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as cs:
+            cs.connect(("localhost", LISTEN_PORT))
+            with ComfyStockings(cs) as scs:
+                scs.handshake_wait()
 
-            scs.write(f"{PROTOCOL_VERSION:03}")
-            msg = scs.read_wait()
-            if "OK" != msg:
-                raise Exception(f"You need to update your client: {msg}")
+                scs.write(f"{PROTOCOL_VERSION:03}")
+                msg = scs.read_wait()
+                if "OK" != msg:
+                    raise Exception(f"You need to update your client: {msg}")
 
-            print("Sending authentication request.")
-            scs.write(f"{group_name},{password}")
+                print("Sending authentication request.")
+                scs.write(f"{group_name},{password}")
 
-            msg = scs.read_wait()
-            if "OK" != msg:
-                raise Exception(f"Authentication: {msg}")
+                msg = scs.read_wait()
+                if "OK" != msg:
+                    raise Exception(f"Authentication: {msg}")
 
-            scs.write("UPLOAD" if upload else "DOWNLOAD")
-            if upload:
-                handle_upload(scs)
-            else:
-                handle_download(scs, download_agent)
-
+                scs.write("UPLOAD" if upload else "DOWNLOAD")
+                if upload:
+                    handle_upload(scs)
+                else:
+                    handle_download(scs, download_agent)
+    except ConnectionRefusedError:
+        print("Connection failed. Try running `stunnel client.conf` from the stunnel directory in this project.")
 
 def handle_upload(scs: ComfyStockings):
     import os
