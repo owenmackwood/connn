@@ -26,12 +26,8 @@ def test_apply_player_action_fail(full_board_p1: np.ndarray):
     from connectn.game import apply_player_action, AgentFailed
 
     for col in np.arange(full_board_p1.shape[1], dtype=full_board_p1.dtype):
-        try:
+        with pytest.raises(AgentFailed):
             apply_player_action(full_board_p1, col, PLAYER1)
-        except AgentFailed:
-            pass
-        else:
-            assert False, "Failed to throw exception when playing in full column."
 
 
 def test_check_end_state_rows(empty_board):
@@ -160,6 +156,79 @@ def test_connected_four_last_action(empty_board: np.ndarray):
                         #     assert not connected_four(b0, player)
 
 
+def test_connected_four_oracle(empty_board: np.ndarray):
+    from connectn.game import check_end_state, other_player, apply_player_action
+    from connectn.game import PlayerAction, NO_PLAYER
+    from connectn.game import connected_four_convolve, connected_four
+
+    for game_n in range(1000):
+        board = empty_board.copy()
+        curr_player = PLAYER1
+        end_state = check_end_state(board, curr_player)
+        move_n = 0
+        while end_state == STILL_PLAYING:
+            move_n += 1
+            curr_player = other_player(curr_player)
+            moves = np.array(
+                [
+                    col
+                    for col in np.arange(PlayerAction(board.shape[1]))
+                    if board[PlayerAction(-1), col] == NO_PLAYER
+                ]
+            )
+            move = np.random.choice(moves, 1)[0]
+            apply_player_action(board, move, curr_player)
+            end_state = check_end_state(board, curr_player)
+
+            conn_4_a = connected_four_convolve(board, curr_player)
+            conn_4_b = connected_four(board, curr_player, move)
+            conn_4_c = connected_four(board, curr_player)
+            assert conn_4_a == conn_4_b
+            assert conn_4_b == conn_4_c
+
+
+def test_connected_four_convolve(empty_board: np.ndarray):
+    from connectn.game import connected_four_convolve, other_player
+
+    for i in range(CONNECT_N - 1):
+        for row in range(empty_board.shape[0]):
+            for col in range(empty_board.shape[1] - CONNECT_N + i + 1):
+                for player in (PLAYER1, PLAYER2):
+                    b0 = empty_board.copy()
+                    b0[row, col : col + CONNECT_N - i] = player
+                    b0[:row, col : col + CONNECT_N - i] = other_player(player)
+                    if i == 0:
+                        assert connected_four_convolve(b0, player)
+                    else:
+                        assert not connected_four_convolve(b0, player)
+
+        for col in range(empty_board.shape[1]):
+            for row in range(empty_board.shape[0] - CONNECT_N + i + 1):
+                for player in (PLAYER1, PLAYER2):
+                    b0 = empty_board.copy()
+                    b0[row : row + CONNECT_N - i, col] = player
+                    b0[:row, col] = other_player(player)
+                    if i == 0:
+                        assert connected_four_convolve(b0, player)
+                    else:
+                        assert not connected_four_convolve(b0, player)
+
+    for i in range(CONNECT_N):
+        n_diagonal = np.diag(np.ones(CONNECT_N - i, dtype=empty_board.dtype))
+        for n_conn in (n_diagonal, n_diagonal[:, ::-1]):
+            for row in range(empty_board.shape[0] - CONNECT_N + i + 1):
+                for col in range(empty_board.shape[1] - CONNECT_N + i + 1):
+                    for player in (PLAYER1, PLAYER2):
+                        b0 = empty_board.copy()
+                        b0[row : row + CONNECT_N - i, col : col + CONNECT_N - i] = (
+                            player * n_conn
+                        )
+                        if i == 0:
+                            assert connected_four_convolve(b0, player)
+                        else:
+                            assert not connected_four_convolve(b0, player)
+
+
 def test_other_player():
     from connectn.game import other_player
 
@@ -208,12 +277,8 @@ def test_generate_move_process(empty_board: np.ndarray):
 def test_run_single_game():
     from connectn.game import run_single_game
 
-    try:
+    with pytest.raises(KeyError):
         run_single_game("doesnotexist", "agent_rows")
-    except KeyError:
-        pass
-    else:
-        assert False
 
     gr = run_single_game("agent_rows", "agent_fail")
     assert gr.winner == PLAYER1
@@ -311,7 +376,9 @@ def test_run_games(monkeypatch):
     updated_agents_b = [("agent_columns", "no file"), ("agent_random", "no file")]
     for updated_agents in (updated_agents_a, updated_agents_b):
         agent_names = [agent_name for agent_name, _ in updated_agents]
-        monkeypatch.setattr(game, "run_single_game", partial(mock_run_single_game, agent_names))
+        monkeypatch.setattr(
+            game, "run_single_game", partial(mock_run_single_game, agent_names)
+        )
         monkeypatch.setattr(
             utils,
             "update_user_agent_code",
@@ -321,4 +388,3 @@ def test_run_games(monkeypatch):
         sq.put(updated_agents)
         ev.set()
         run_games_process(sq, rq, ev, play_all=False)
-

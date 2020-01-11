@@ -9,6 +9,7 @@ from connectn.users import import_agents, agents
 from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
 from connectn import IS_DEBUGGING
 import numba as nb
+from scipy.signal.sigtools import _convolve2d
 
 logger = logging.getLogger(__name__)
 
@@ -599,6 +600,41 @@ def connected_four(
     return False
 
 
+col_kernel = np.ones((CONNECT_N, 1), dtype=BoardPiece)
+row_kernel = np.ones((1, CONNECT_N), dtype=BoardPiece)
+dia_l_kernel = np.diag(np.ones(CONNECT_N, dtype=BoardPiece))
+dia_r_kernel = np.array(np.diag(np.ones(CONNECT_N, dtype=BoardPiece))[::-1, :])
+
+
+def connected_four_convolve(board: np.ndarray, player: BoardPiece,) -> bool:
+    # No point in using last_action here because it isn't any faster.
+    # rows, cols = board.shape
+    #
+    # if last_action is not None:
+    #     lc = last_action
+    #     last_rows = np.atleast_1d(np.argwhere(board[:, lc] != NO_PLAYER).squeeze())
+    #     lr = last_rows[-1] if len(last_rows) else 0
+    #     min_row = max(lr-CONNECT_N+1, 0)
+    #     max_row = min(lr+CONNECT_N, rows)
+    #     min_col = max(lc-CONNECT_N+1, 0)
+    #     max_col = min(lc+CONNECT_N, cols)
+    #     board = board[min_row : max_row, min_col : max_col]
+    #     # board = np.array(board)
+    #     # print(last_rows, view_rows, view_cols, board.shape)
+    #     # print(pretty_print_board(board))
+    # else:
+    board = board.copy()
+
+    board[board == other_player(player)] = NO_PLAYER
+    board[board == player] = BoardPiece(1)
+
+    for kernel in (col_kernel, row_kernel, dia_l_kernel, dia_r_kernel):
+        result = _convolve2d(board, kernel, 1, 0, 0, BoardPiece(0))
+        if np.any(result == CONNECT_N):
+            return True
+    return False
+
+
 @nb.njit(cache=True)
 def check_end_state(
     board: np.ndarray, player: BoardPiece, last_action: Optional[PlayerAction] = None,
@@ -679,10 +715,28 @@ if __name__ == "__main__":
     import timeit
 
     action = PlayerAction(3)
-    number = 1000000
-    for row in range(6):
-        board = initialize_game_state()
-        board[: row + 1, action] = PLAYER1
+    number = 10000
+    board = initialize_game_state()
+    for col in np.arange(board.shape[1], step=2):
+        board[: CONNECT_N - 1, col] = PLAYER1
+        board[CONNECT_N - 1 :, col] = PLAYER2
+    for col in np.arange(1, board.shape[1] - 1, step=2):
+        board[CONNECT_N - 1 :, col] = PLAYER1
+        board[: CONNECT_N - 1, col] = PLAYER2
+
+    for col in range(7):
+        ns = {
+            "connected_four_convolve": connected_four_convolve,
+            "board": board,
+            "PLAYER1": PLAYER1,
+        }
+        t0 = timeit.timeit(
+            "connected_four_convolve(board, PLAYER1)",
+            "connected_four_convolve(board, PLAYER1)",
+            globals=ns,
+            number=number,
+        )
+        print(f"Conv version: {t0 / number:.1e}")
 
         ns = {"connected_four": connected_four, "board": board, "PLAYER1": PLAYER1}
         t0 = timeit.timeit(
@@ -691,7 +745,7 @@ if __name__ == "__main__":
             globals=ns,
             number=number,
         )
-        print(f"Dumb version: {t0/number:e}")
+        print(f"Dumb version: {t0/number:.1e}")
 
         ns = {
             "connected_four": connected_four,
@@ -705,4 +759,6 @@ if __name__ == "__main__":
             globals=ns,
             number=number,
         )
-        print(f"'Smart' version: {t0/number:e}")
+        print(f"Smrt version: {t0/number:.1e}")
+        print("="*10)
+
