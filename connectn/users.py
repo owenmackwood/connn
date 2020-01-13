@@ -44,8 +44,8 @@ def import_agents(agent_modules: Dict[str, ModuleType]) -> Dict[str, ModuleType]
         except ModuleNotFoundError:
             pass
             # print(f'No module provided yet by {name}')
-        # except Exception as e:
-        #     print(f'Failed to import module {name}, with error: {e}')
+        except Exception as e:
+            print(f'Failed to import module {name}, with error: {e}')
     return new_modules
 
 
