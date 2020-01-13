@@ -433,7 +433,15 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     try:
         with redirect_stdout(f_stdout), redirect_stderr(f_stderr):
             t0 = time()
-            action, saved_state = generate_move(gma.board, gma.player, gma.state)
+            returned = generate_move(gma.board, gma.player, gma.state)
+            saved_state = None
+            if isinstance(returned, tuple):
+                action = returned[0]
+                if len(returned) > 1:
+                    saved_state = returned[1]
+            else:
+                action = returned
+
             move_time = time() - t0
         stdout, stderr = f_stdout.getvalue(), f_stderr.getvalue()
         result = GenMoveSuccess(stdout, stderr, move_time, action, saved_state)
