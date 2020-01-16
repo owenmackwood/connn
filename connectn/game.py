@@ -686,9 +686,10 @@ def human_vs_agent(
     args_2: tuple = (),
 ):
     for gen_move, args in zip((generate_move_1, generate_move_2), (args_1, args_2)):
-        gen_move(initialize_game_state(), PLAYER1, None, *args)
+        if gen_move is not user_move:
+            gen_move(initialize_game_state(), PLAYER1, None, *args)
     for play_first in (1, -1):
-        saved_state = None
+        saved_state = {PLAYER1: None, PLAYER2: None}
         board = initialize_game_state()
         playing = True
         while playing:
@@ -703,7 +704,7 @@ def human_vs_agent(
                 print(
                     f'{player_name} you are playing with {"X" if player == 1 else "O"}'
                 )
-                action, saved_state = gen_move(board.copy(), player, saved_state, *args)
+                action, saved_state[player] = gen_move(board.copy(), player, saved_state[player], *args)
                 print(f"Move time: {time.time() - t0:.3f}s")
                 apply_player_action(board, action, player)
                 end_state = check_end_state(board, player)
