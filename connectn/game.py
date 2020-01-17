@@ -3,7 +3,7 @@ import multiprocessing as mp
 import numpy as np
 import traceback
 import logging
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Callable
 from connectn.utils import GenMove, mib, SavedState
 from connectn.users import import_agents, agents
 from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
@@ -267,8 +267,9 @@ def run_single_game(
     game_state = initialize_game_state()
     for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
         try:
-            gen_move[agent_name](game_state.copy(), player, None)
-        except Exception:
+            init = getattr(agent_modules[agent_name], "initialize")
+            init(game_state.copy(), player)
+        except (Exception, AttributeError):
             pass
 
     loser_result = "LOSS"
@@ -684,20 +685,24 @@ def human_vs_agent(
     player_2: str = "Player 2",
     args_1: tuple = (),
     args_2: tuple = (),
+    init_1: Callable = lambda board, player: None,
+    init_2: Callable = lambda board, player: None,
 ):
-    for gen_move, args in zip((generate_move_1, generate_move_2), (args_1, args_2)):
-        if gen_move is not user_move:
-            gen_move(initialize_game_state(), PLAYER1, None, *args)
+    players = (PLAYER1, PLAYER2)
     for play_first in (1, -1):
+        for init, player in zip((init_1, init_2)[::play_first], players):
+            init(initialize_game_state(), player)
+
         saved_state = {PLAYER1: None, PLAYER2: None}
         board = initialize_game_state()
+        gen_moves = (generate_move_1, generate_move_2)[::play_first]
+        player_names = (player_1, player_2)[::play_first]
+        gen_args = (args_1, args_2)[::play_first]
+
         playing = True
         while playing:
-            gen_moves = (generate_move_1, generate_move_2)[::play_first]
-            player_names = (player_1, player_2)[::play_first]
-            gen_args = (args_1, args_2)[::play_first]
             for player, player_name, gen_move, args in zip(
-                (PLAYER1, PLAYER2), player_names, gen_moves, gen_args,
+                players, player_names, gen_moves, gen_args,
             ):
                 t0 = time.time()
                 print(pretty_print_board(board))
