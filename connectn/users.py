@@ -4,16 +4,20 @@ import pickle
 import os
 from typing import Tuple, Dict, List
 from types import ModuleType
-from connectn.utils import KEY_SALT_FILE
+from connectn.utils import KEY_SALT_FILE, AGENTS_PER_USER
 
-user_auth = {}
-
+user_auth : Dict[str, Tuple[bytes, bytes]] = {}
 
 def load_user_auth() -> Dict[str, Tuple[bytes, bytes]]:
     global user_auth
     if len(user_auth) < 1 and KEY_SALT_FILE.exists():
         with open(f"{KEY_SALT_FILE!s}", "rb") as f:
             user_auth.update(pickle.load(f))
+        if AGENTS_PER_USER > 1:
+            users_auth = [(user, auth) for user, auth in user_auth.items()]
+            for i in range(2, AGENTS_PER_USER+1):
+                for user, auth in users_auth:
+                    user_auth[f"{user}{i}"] = auth
     return user_auth
 
 
@@ -54,7 +58,13 @@ def hash_password(password: str, salt: bytes) -> bytes:
 
 
 def authenticate_user(user: str, password: str) -> bool:
+    import string
+
     all_user_auth = load_user_auth()
+    user_version = user[-1]
+    if user_version in string.digits:
+        if 0 < int(user_version) <= AGENTS_PER_USER:
+            user = user[:-1]
     if user in all_user_auth:
         key, salt = all_user_auth[user]
         return key == hash_password(password, salt)
@@ -98,4 +108,4 @@ def generate_users(num_users: int, pw_length: int = 8, append: bool = True):
 
 
 if __name__ == "__main__":
-    generate_users(1, append=False)
+    generate_users(1, append=True)

@@ -17,13 +17,15 @@ SERVER_PROCESS_DATA_DIR: Path = ROOT_DATA_DIR / "server_process"
 KEY_SALT_FILE: Path = SERVER_PROCESS_DATA_DIR / "keys_salts"
 GAME_PROCESS_DATA_DIR: Path = ROOT_DATA_DIR / "game_process"
 TEMP_DIR: Path = GAME_PROCESS_DATA_DIR / "tmp"
-MOVE_TIME_MAX = 20.0
+MOVE_TIME_MAX = 10.0
 STATE_MEMORY_MAX = 2 ** 30  # Max of 1 GB
 RUN_ALL_EVERY = 6  # Only rerun every six hours
 ON_CLUSTER = platform.node() == "cluster"
 LOG_LEVEL = "INFO"
 PLAY_ALL = False
 TOURNAMENT_FILE = "all_games"
+AGENTS_PER_USER = 2
+
 
 if not ROOT_DATA_DIR.exists():
     ROOT_DATA_DIR.mkdir()
