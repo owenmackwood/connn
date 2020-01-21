@@ -1,3 +1,4 @@
+import logging
 import importlib
 import hashlib
 import pickle
@@ -35,6 +36,8 @@ def agents() -> List[str]:
 
 
 def import_agents(agent_modules: Dict[str, ModuleType]) -> Dict[str, ModuleType]:
+    logger = logging.getLogger(__name__)
+
     new_modules = dict()
     for agent in agents():
         name = ".".join(("connectn", "agents", agent))
@@ -48,8 +51,8 @@ def import_agents(agent_modules: Dict[str, ModuleType]) -> Dict[str, ModuleType]
         except ModuleNotFoundError:
             pass
             # print(f'No module provided yet by {name}')
-        except Exception as e:
-            print(f'Failed to import module {name}, with error: {e}')
+        except Exception:
+            logger.exception(f'Failed to import module {name}')
     return new_modules
 
 
@@ -60,11 +63,14 @@ def hash_password(password: str, salt: bytes) -> bytes:
 def authenticate_user(user: str, password: str) -> bool:
     import string
 
+    logger = logging.getLogger(__name__)
     all_user_auth = load_user_auth()
     user_version = user[-1]
     if user_version in string.digits:
         if 0 < int(user_version) <= AGENTS_PER_USER:
             user = user[:-1]
+        else:
+            logger.warning(f"User {user} provided an illegal version.")
     if user in all_user_auth:
         key, salt = all_user_auth[user]
         return key == hash_password(password, salt)
