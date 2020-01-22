@@ -422,6 +422,36 @@ def get_all_game_summaries(file_path: Path = RESULTS_FILE_PATH) -> List[GameSumm
     return all_games
 
 
+def load_board_from_game(
+    agent_name: str, agent_version: int, game_number: int, agent_file_path: Path
+) -> np.ndarray:
+    """
+    Constructs the final board from a game played by an agent.
+
+    Parameters
+    ----------
+    agent_name : str
+    agent_version : int
+    game_number : int
+    agent_file_path: Path
+
+    Returns
+    -------
+    board : np.array
+    """
+    from connectn.game import initialize_game_state, apply_player_action
+    from connectn.game import PLAYER1, PLAYER2
+
+    game_record = get_game_for_agent(
+        agent_name, agent_version, game_number, agent_file_path
+    )
+    moves = game_record["moves"].flatten()
+    board = initialize_game_state()
+    for i, move in enumerate(moves[moves > -1]):
+        apply_player_action(board, move, PLAYER2 if i % 2 else PLAYER1)
+    return board
+
+
 def _check_for_agent(results_file: tables.File, agent_name: str) -> None:
     """
     Check whether an agent exists in the `/current` table of the results
@@ -829,8 +859,8 @@ def _game_string(game_number: int) -> str:
 if __name__ == "__main__":
     from connectn.users import agents
 
-    results_path = Path.home() / "tournament" / "all_games-2019-12-16-11h04m47s.h5"
-    agent_path = Path.home() / "tournament" / "group_e-2019-12-16-11h04m47s.h5"
+    results_path = Path.home() / "tournament" / "all_games-2020-01-13-14h23m18s.h5"
+    agent_path = Path.home() / "tournament" / "group_f-2020-01-20-17h20m31s.h5"
 
     show_summary = False
     if show_summary:
@@ -839,7 +869,9 @@ if __name__ == "__main__":
         for g in games:
             for j in (1, 2):
                 res = g[f"agent{j}"]
-                if res["outcome"] not in ("WIN", "LOSS", "DRAW"):
+                if (
+                    res["name"] == "group_b" and res["outcome"] == "LOSS"
+                ):  # not in ("WIN", "LOSS", "DRAW"):
                     print(
                         f"{g['when/time_str']} ({g['when/time_sec']} seconds since the Epoch)"
                     )
@@ -858,9 +890,12 @@ if __name__ == "__main__":
             if not agent_versions:
                 print(f"No agent versions for {an}")
 
-    print_stderr = False
+    print_stderr = True
     if print_stderr:
         # Example of how to load a game from a specified agent file.
-        gi = get_game_for_agent("group_e", 0, 385, agent_path)
-        for li in gi["stderr"]:
-            print(li)
+        for gn in range(10):
+            gi = get_game_for_agent(
+                "group_f", agent_version=4, game_number=gn, agent_file_path=agent_path
+            )
+            for li in gi["stderr"]:
+                print(li)
