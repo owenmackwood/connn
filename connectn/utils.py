@@ -7,12 +7,14 @@ import os
 import sys
 from pathlib import Path
 import platform
+import logging
 
 LISTEN_PORT = 2323
 PROTOCOL_VERSION = 1
 ARCHIVE_FORMAT = "tar"
 ROOT_DATA_DIR: Path = Path.home() / "tournament"
-LOG_FILE: Path = ROOT_DATA_DIR / "server.log"
+SERVER_PROCESS_LOG: Path = ROOT_DATA_DIR / "server.log"
+GAME_PROCESS_LOG: Path = ROOT_DATA_DIR / "game.log"
 SERVER_PROCESS_DATA_DIR: Path = ROOT_DATA_DIR / "server_process"
 KEY_SALT_FILE: Path = SERVER_PROCESS_DATA_DIR / "keys_salts"
 GAME_PROCESS_DATA_DIR: Path = ROOT_DATA_DIR / "game_process"
@@ -77,7 +79,7 @@ class ComfyStockings(Stockings.Stocking):
 def parse_arguments():
     import argparse
 
-    global LOG_LEVEL, MOVE_TIME_MAX, LOG_FILE, STATE_MEMORY_MAX, PLAY_ALL, RUN_ALL_EVERY
+    global LOG_LEVEL, MOVE_TIME_MAX, SERVER_PROCESS_LOG, STATE_MEMORY_MAX, PLAY_ALL, RUN_ALL_EVERY
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
@@ -85,7 +87,7 @@ def parse_arguments():
         "--logfile",
         help="Path and name of log file.",
         type=str,
-        default=f"{LOG_FILE!s}",
+        default=f"{SERVER_PROCESS_LOG!s}",
     )
     parser.add_argument(
         "--level",
@@ -121,7 +123,7 @@ def parse_arguments():
 
     args = parser.parse_args()
 
-    LOG_FILE = Path(args.logfile).expanduser()
+    SERVER_PROCESS_LOG = Path(args.logfile).expanduser()
     LOG_LEVEL = args.level.upper()
     MOVE_TIME_MAX = args.maxtime
     STATE_MEMORY_MAX = int(np.round(STATE_MEMORY_MAX * args.maxsize))
@@ -129,27 +131,27 @@ def parse_arguments():
     RUN_ALL_EVERY = args.schedule
 
 
-def configure_logging():
-    import logging
-
-    numeric_level = getattr(logging, LOG_LEVEL, None)
+def configure_logging(log_file: Path, log_level: str=LOG_LEVEL):
+    numeric_level = getattr(logging, log_level, None)
 
     if not isinstance(numeric_level, int):
-        raise ValueError(f"Invalid log level: {LOG_LEVEL}")
+        raise ValueError(f"Invalid log level: {log_level}")
 
     logging.basicConfig(
-        filename=f"{LOG_FILE!s}",
+        filename=f"{log_file!s}",
         filemode="w",
         level=numeric_level,
-        format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
+        format="%(asctime)s %(levelname)s/%(processName)s:%(name)s:%(message)s",
     )
     root = logging.getLogger()
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setLevel(numeric_level)
-    stdout_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s:%(name)s:%(message)s")
-    )
-    root.addHandler(stdout_handler)
+    if len(root.handlers) == 0:
+        # Only add handler to write to stdout if the root logger hasn't yet been configured.
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(numeric_level)
+        stdout_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s/%(processName)s:%(name)s:%(message)s")
+        )
+        root.addHandler(stdout_handler)
 
 
 def get_size(obj, seen=None) -> int:

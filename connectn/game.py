@@ -11,7 +11,6 @@ from connectn import IS_DEBUGGING
 import numba as nb
 from scipy.signal.sigtools import _convolve2d
 
-logger = logging.getLogger(__name__)
 
 CONNECT_N = np.int8(4)
 
@@ -94,11 +93,14 @@ def run_games_process(
 ):
     from itertools import product
     from queue import Empty as EmptyQueue
-    from connectn.utils import update_user_agent_code, TOURNAMENT_FILE, RUN_ALL_EVERY
+    from connectn.utils import update_user_agent_code, configure_logging
+    from connectn.utils import TOURNAMENT_FILE, RUN_ALL_EVERY, GAME_PROCESS_LOG
     from connectn.results import RESULTS_FILE_PATH, GAME_PROCESS_DATA_DIR
     from connectn import results
     from threading import Timer, Event
 
+    configure_logging(GAME_PROCESS_LOG)
+    logger = logging.getLogger(__name__)
     logger.info("Started run_games_process.")
 
     if not GAME_PROCESS_DATA_DIR.exists():
@@ -183,10 +185,12 @@ def run_games_process(
     logger.info(f"Shutting down run_games gracefully.")
 
 
-def run_games_cluster(to_play):
+def run_games_cluster(to_play: List[List[str]]):
     from gridmap import grid_map
     import connectn.results as results
     from connectn.utils import TEMP_DIR
+
+    logger = logging.getLogger(__name__)
 
     if not TEMP_DIR.exists():
         TEMP_DIR.mkdir()
@@ -196,6 +200,8 @@ def run_games_cluster(to_play):
 
     logger.info(f"Submitting games to the queue: {to_play}")
 
+    n_games = len(to_play)
+    n_done = 1
     for game_result in grid_map(
         run_single_game,
         to_play,
@@ -207,11 +213,18 @@ def run_games_cluster(to_play):
         add_env={"CREATE_PLOTS": "FALSE", "USE_MEM_FREE": "TRUE"},
         require_cluster=True,
     ):
+        logging.info(f"Received result {n_done} of {n_games}")
         results.add_game(game_result)
+        logging.info(f"Wrote result {n_done} of {n_games} to disk.")
+        n_done += 1
+
+    logging.info(f"Finished all {n_games} games.")
 
 
-def run_games_local(to_play):
+def run_games_local(to_play: List[List[str]]):
     import connectn.results as results
+
+    logger = logging.getLogger(__name__)
 
     for g in to_play:
         try:
@@ -229,6 +242,7 @@ def run_single_game(
     """
     from connectn.utils import get_size
 
+    logger = logging.getLogger(__name__)
     rs = np.random.RandomState(game_seed)
 
     agent_modules = import_agents({})
@@ -424,6 +438,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     from time import time
     from contextlib import redirect_stderr, redirect_stdout
 
+    logger = logging.getLogger(__name__)
     f_stderr, f_stdout = io.StringIO(), io.StringIO()
 
     gma: GenMoveArgs = moves_q.get()

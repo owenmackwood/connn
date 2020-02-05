@@ -4,15 +4,9 @@ from pathlib import Path
 from typing import List, Tuple
 import multiprocessing as mp
 from connectn.utils import configure_logging, parse_arguments
-from connectn.utils import ComfyStockings, ROOT_DATA_DIR, SERVER_PROCESS_DATA_DIR
+from connectn.utils import ComfyStockings, ROOT_DATA_DIR, SERVER_PROCESS_DATA_DIR, SERVER_PROCESS_LOG
 
 parse_arguments()
-configure_logging()
-
-if not ROOT_DATA_DIR.exists():
-    ROOT_DATA_DIR.mkdir()
-if not SERVER_PROCESS_DATA_DIR.exists():
-    SERVER_PROCESS_DATA_DIR.mkdir()
 
 
 def run_server():
@@ -20,15 +14,24 @@ def run_server():
     from connectn.game import run_games_process
     from multiprocessing.managers import SyncManager
 
-    logger = logging.getLogger(__name__)
+    log_to_single_file = False
+
+    if log_to_single_file:
+        configure_logging(SERVER_PROCESS_LOG)
 
     manager = SyncManager()
     manager.start(_process_init)
     sq = mp.Queue()
     rq = manager.Queue()
     shutdown = manager.Event()
-    rg = mp.Process(target=_process_init, args=(run_games_process, sq, rq, shutdown, PLAY_ALL))
+    rg = mp.Process(target=_process_init, args=(run_games_process, sq, rq, shutdown, PLAY_ALL),
+                    name="RunGames")
     rg.start()
+
+    if not log_to_single_file:
+        configure_logging(SERVER_PROCESS_LOG)
+
+    logger = logging.getLogger(__name__)
 
     logger.info("Started run_games process")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ls:
@@ -243,4 +246,9 @@ def _process_init(func=None, *args):
 
 
 if __name__ == "__main__":
+    if not ROOT_DATA_DIR.exists():
+        ROOT_DATA_DIR.mkdir()
+    if not SERVER_PROCESS_DATA_DIR.exists():
+        SERVER_PROCESS_DATA_DIR.mkdir()
+
     run_server()
