@@ -74,7 +74,7 @@ class GenMoveResult:
 
 class GenMoveSuccess(GenMoveResult):
     def __init__(
-        self, stdout: str, stderr: str, move_time: float, action: int, state: SavedState
+        self, stdout: str, stderr: str, move_time: float, action: int, state: Optional[SavedState]
     ):
         super().__init__(stdout, stderr)
         self.move_time = move_time
@@ -242,6 +242,7 @@ def run_single_game(
     from connectn.utils import get_size
 
     logger = logging.getLogger(__name__)
+    logger.debug(f"Entered run_single_game for {agent_1} vs {agent_2}")
     rs = np.random.RandomState(game_seed)
 
     agent_modules = import_agents({})
@@ -427,6 +428,9 @@ def run_single_game(
     else:
         results[PLAYER1 if winner == PLAYER1 else PLAYER2].outcome = "WIN"
         results[PLAYER2 if winner == PLAYER1 else PLAYER1].outcome = loser_result
+
+    logger.debug(f"Finished run_single_game for {agent_1} vs {agent_2}")
+
     return gr
 
 
@@ -435,6 +439,7 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     from random import seed as random_seed
     import io
     from time import time
+    import pickle
     from contextlib import redirect_stderr, redirect_stdout
 
     logger = logging.getLogger(__name__)
@@ -444,7 +449,6 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     np.random.seed(gma.seed)
     random_seed(gma.seed)
 
-    result = None
     try:
         with redirect_stdout(f_stdout), redirect_stderr(f_stderr):
             t0 = time()
@@ -468,8 +472,12 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
             error_msg += str(item)
         stdout, stderr = f_stdout.getvalue(), f_stderr.getvalue()
         result = GenMoveFailure(stdout, stderr, error_msg)
-    finally:
+
+    try:
         moves_q.put(result)
+    except pickle.PickleError:
+        logger.exception("Internal error in trying to send the result, probably caused by saved_state")
+        moves_q.put(GenMoveSuccess(stdout, stderr, move_time, action, None))
 
 
 def pretty_print_board(board: np.ndarray) -> str:
