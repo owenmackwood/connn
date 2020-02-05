@@ -93,13 +93,12 @@ def run_games_process(
 ):
     from itertools import product
     from queue import Empty as EmptyQueue
-    from connectn.utils import update_user_agent_code, configure_logging
-    from connectn.utils import TOURNAMENT_FILE, RUN_ALL_EVERY, GAME_PROCESS_LOG
+    from connectn.utils import update_user_agent_code
+    from connectn.utils import TOURNAMENT_FILE, RUN_ALL_EVERY
     from connectn.results import RESULTS_FILE_PATH, GAME_PROCESS_DATA_DIR
     from connectn import results
     from threading import Timer, Event
 
-    configure_logging(GAME_PROCESS_LOG)
     logger = logging.getLogger(__name__)
     logger.info("Started run_games_process.")
 

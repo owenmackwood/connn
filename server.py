@@ -14,10 +14,8 @@ def run_server():
     from connectn.game import run_games_process
     from multiprocessing.managers import SyncManager
 
-    log_to_single_file = False
-
-    if log_to_single_file:
-        configure_logging(SERVER_PROCESS_LOG)
+    configure_logging(SERVER_PROCESS_LOG)
+    logger = logging.getLogger(__name__)
 
     manager = SyncManager()
     manager.start(_process_init)
@@ -27,11 +25,6 @@ def run_server():
     rg = mp.Process(target=_process_init, args=(run_games_process, sq, rq, shutdown, PLAY_ALL),
                     name="RunGames")
     rg.start()
-
-    if not log_to_single_file:
-        configure_logging(SERVER_PROCESS_LOG)
-
-    logger = logging.getLogger(__name__)
 
     logger.info("Started run_games process")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ls:

@@ -144,14 +144,13 @@ def configure_logging(log_file: Path, log_level: str=LOG_LEVEL):
         format="%(asctime)s %(levelname)s/%(processName)s:%(name)s:%(message)s",
     )
     root = logging.getLogger()
-    if len(root.handlers) == 0:
-        # Only add handler to write to stdout if the root logger hasn't yet been configured.
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setLevel(numeric_level)
-        stdout_handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s/%(processName)s:%(name)s:%(message)s")
-        )
-        root.addHandler(stdout_handler)
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(numeric_level)
+    stdout_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s/%(processName)s:%(name)s:%(message)s")
+    )
+    root.addHandler(stdout_handler)
 
 
 def get_size(obj, seen=None) -> int:
