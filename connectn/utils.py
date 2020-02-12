@@ -131,7 +131,7 @@ def parse_arguments():
     RUN_ALL_EVERY = args.schedule
 
 
-def configure_logging(log_file: Path, log_level: str=LOG_LEVEL):
+def configure_logging(log_file: Path, log_level: str = LOG_LEVEL):
     numeric_level = getattr(logging, log_level, None)
 
     if not isinstance(numeric_level, int):
@@ -148,7 +148,9 @@ def configure_logging(log_file: Path, log_level: str=LOG_LEVEL):
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setLevel(numeric_level)
     stdout_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s/%(processName)s:%(name)s:%(message)s")
+        logging.Formatter(
+            "%(asctime)s %(levelname)s/%(processName)s:%(name)s:%(message)s"
+        )
     )
     root.addHandler(stdout_handler)
 

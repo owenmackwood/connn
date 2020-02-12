@@ -4,10 +4,8 @@ import numpy as np
 import traceback
 import logging
 from typing import List, Union, Optional, Callable
-from connectn.utils import GenMove, mib, SavedState
+import connectn.utils as cu
 from connectn.users import import_agents, agents
-from connectn.utils import MOVE_TIME_MAX, STATE_MEMORY_MAX, ON_CLUSTER
-from connectn import IS_DEBUGGING
 import numba as nb
 from scipy.signal.sigtools import _convolve2d
 
@@ -58,7 +56,7 @@ class GenMoveArgs:
         seed: Union[int, None],
         board: np.ndarray,
         player: BoardPiece,
-        state: Optional[SavedState],
+        state: Optional[cu.SavedState],
     ):
         self.seed = seed
         self.board = board
@@ -74,7 +72,12 @@ class GenMoveResult:
 
 class GenMoveSuccess(GenMoveResult):
     def __init__(
-        self, stdout: str, stderr: str, move_time: float, action: int, state: Optional[SavedState]
+        self,
+        stdout: str,
+        stderr: str,
+        move_time: float,
+        action: int,
+        state: Optional[cu.SavedState],
     ):
         super().__init__(stdout, stderr)
         self.move_time = move_time
@@ -93,26 +96,23 @@ def run_games_process(
 ):
     from itertools import product
     from queue import Empty as EmptyQueue
-    from connectn.utils import update_user_agent_code
-    from connectn.utils import TOURNAMENT_FILE, RUN_ALL_EVERY
-    from connectn.results import RESULTS_FILE_PATH, GAME_PROCESS_DATA_DIR
-    from connectn import results
     from threading import Timer, Event
+    import connectn.results as cr
 
     logger = logging.getLogger(__name__)
     logger.info("Started run_games_process.")
 
-    if not GAME_PROCESS_DATA_DIR.exists():
-        GAME_PROCESS_DATA_DIR.mkdir()
+    if not cr.GAME_PROCESS_DATA_DIR.exists():
+        cr.GAME_PROCESS_DATA_DIR.mkdir()
 
     repetitions = 1
     run_all_after = (
-        60.0 * 60 * RUN_ALL_EVERY
-    )  # Run all-against-all every RUN_ALL_EVERY hours
+        60.0 * 60 * cu.RUN_ALL_EVERY
+    )  # Run all-against-all every cu.RUN_ALL_EVERY hours
     block_time = 1
 
     agent_modules = import_agents({})
-    results.initialize(agent_modules.keys())
+    cr.initialize(agent_modules.keys())
 
     if play_all:
         logger.info(f"Just started, running all-against-all once.")
@@ -135,7 +135,7 @@ def run_games_process(
                 if g[0] != g[1] and (g[0] in updated_agents or g[1] in updated_agents)
             ]
             updated_agents.clear()
-            if ON_CLUSTER:
+            if cu.ON_CLUSTER:
                 logger.info(f"About to play {len(to_play)} games on the cluster.")
                 run_games_cluster(to_play)
             else:
@@ -144,16 +144,14 @@ def run_games_process(
 
             logger.info("Finished game-play round.")
 
-            played = set(
-                n for p in to_play for n in p if results.record_games_for_agent(n)
-            )
+            played = set(n for p in to_play for n in p if cr.record_games_for_agent(n))
 
             new_results = {}
             for agent_name in played:
-                with open(f"{results.agent_games_file_path(agent_name)}", "rb") as f:
+                with open(f"{cr.agent_games_file_path(agent_name)}", "rb") as f:
                     new_results[agent_name] = f.read()
-            with open(f"{RESULTS_FILE_PATH!s}", "rb") as f:
-                new_results[TOURNAMENT_FILE] = f.read()
+            with open(f"{cr.RESULTS_FILE_PATH!s}", "rb") as f:
+                new_results[cu.TOURNAMENT_FILE] = f.read()
             logger.info(
                 f"Sending {len(new_results)} modified result files to the server."
             )
@@ -176,7 +174,7 @@ def run_games_process(
                 updated_agents = list(agents())
                 msg = "Received request to play all-against-all."
             else:
-                updated_agents = update_user_agent_code(q_data)
+                updated_agents = cu.update_user_agent_code(q_data)
                 msg = f'Received {len(updated_agents)} updated agents for game-play: {" ".join(updated_agents)}'
             logger.info(msg)
 
@@ -239,7 +237,8 @@ def run_single_game(
     """
     Likely has to be replaced by separate function runnable via the GridEngine
     """
-    from connectn.utils import get_size
+    from connectn import IS_DEBUGGING
+    from queue import Empty as EmptyQueue
 
     logger = logging.getLogger(__name__)
     logger.debug(f"Entered run_single_game for {agent_1} vs {agent_2}")
@@ -248,8 +247,8 @@ def run_single_game(
     agent_modules = import_agents({})
     agent_names = (agent_1, agent_2)
 
-    def get_name(player: BoardPiece) -> str:
-        return agent_names[player - 1]
+    def get_name(_player: BoardPiece) -> str:
+        return agent_names[_player - 1]
 
     states = {agent_name: None for agent_name in agent_names}
 
@@ -261,7 +260,7 @@ def run_single_game(
     gen_move = {}
     for player, agent_name in zip((PLAYER1, PLAYER2), agent_names):
         try:
-            gen_move[agent_name]: GenMove = getattr(
+            gen_move[agent_name]: cu.GenMove = getattr(
                 agent_modules[agent_name], "generate_move"
             )
         except AttributeError:
@@ -312,15 +311,21 @@ def run_single_game(
                     )
                     t0 = time.time()
                     ap.start()
-                    ap.join(MOVE_TIME_MAX)
+                    ap.join(cu.MOVE_TIME_MAX)
                     move_time = time.time() - t0
                     if ap.is_alive():
                         ap.terminate()
                         loser_result = "TIMEOUT"
-                        msg = f"Agent {agent_name} timed out after {MOVE_TIME_MAX} seconds ({move_time:.1f}s)."
+                        msg = f"Agent {agent_name} timed out after {cu.MOVE_TIME_MAX} seconds ({move_time:.1f}s)."
                         raise AgentFailed(msg)
 
-                ret: Union[GenMoveSuccess, GenMoveFailure] = moves_q.get(block=True)
+                try:
+                    ret: Union[GenMoveSuccess, GenMoveFailure] = moves_q.get(
+                        block=True, timeout=60.0
+                    )
+                except EmptyQueue:
+                    logger.exception("Timed out waiting to get move result from queue")
+                    raise
 
                 results[player].stdout.append(ret.stdout)
                 results[player].stderr.append(ret.stderr)
@@ -333,14 +338,14 @@ def run_single_game(
 
                 assert isinstance(ret, GenMoveSuccess)
                 action = ret.action
-                state_size = get_size(ret.state)
+                state_size = cu.get_size(ret.state)
 
                 results[player].move_times.append(ret.move_time)
                 results[player].state_size.append(state_size)
 
-                if state_size > STATE_MEMORY_MAX:
+                if state_size > cu.STATE_MEMORY_MAX:
                     loser_result = "MAX_STATE_MEM"
-                    msg = f"Agent {agent_name} used {mib(state_size):.2f} MiB > {mib(STATE_MEMORY_MAX)} MiB"
+                    msg = f"Agent {agent_name} used {cu.mib(state_size):.2f} MiB > {cu.mib(cu.STATE_MEMORY_MAX)} MiB"
                     raise AgentFailed(msg)
 
                 if not np.issubdtype(type(action), np.integer):
@@ -434,7 +439,7 @@ def run_single_game(
     return gr
 
 
-def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
+def generate_move_process(generate_move: cu.GenMove, moves_q: mp.Queue):
     from traceback import StackSummary
     from random import seed as random_seed
     import io
@@ -476,7 +481,9 @@ def generate_move_process(generate_move: GenMove, moves_q: mp.Queue):
     try:
         moves_q.put(result)
     except pickle.PickleError:
-        logger.exception("Internal error in trying to send the result, probably caused by saved_state")
+        logger.exception(
+            "Internal error in trying to send the result, probably caused by saved_state"
+        )
         moves_q.put(GenMoveSuccess(stdout, stderr, move_time, action, None))
 
 
@@ -690,7 +697,7 @@ def check_end_state(
     return STILL_PLAYING
 
 
-def user_move(board, player, saved_state):
+def user_move(board, _player, saved_state):
     col = -1
     while not 0 <= col < board.shape[1]:
         try:
@@ -701,8 +708,8 @@ def user_move(board, player, saved_state):
 
 
 def human_vs_agent(
-    generate_move_1: GenMove,
-    generate_move_2: GenMove = user_move,
+    generate_move_1: cu.GenMove,
+    generate_move_2: cu.GenMove = user_move,
     player_1: str = "Player 1",
     player_2: str = "Player 2",
     args_1: tuple = (),
@@ -731,7 +738,9 @@ def human_vs_agent(
                 print(
                     f'{player_name} you are playing with {"X" if player == 1 else "O"}'
                 )
-                action, saved_state[player] = gen_move(board.copy(), player, saved_state[player], *args)
+                action, saved_state[player] = gen_move(
+                    board.copy(), player, saved_state[player], *args
+                )
                 print(f"Move time: {time.time() - t0:.3f}s")
                 apply_player_action(board, action, player)
                 end_state = check_end_state(board, player)
@@ -750,51 +759,50 @@ def human_vs_agent(
 if __name__ == "__main__":
     import timeit
 
-    action = PlayerAction(3)
+    _action = PlayerAction(3)
     number = 10000
-    board = initialize_game_state()
-    for col in np.arange(board.shape[1], step=2):
-        board[: CONNECT_N - 1, col] = PLAYER1
-        board[CONNECT_N - 1 :, col] = PLAYER2
-    for col in np.arange(1, board.shape[1] - 1, step=2):
-        board[CONNECT_N - 1 :, col] = PLAYER1
-        board[: CONNECT_N - 1, col] = PLAYER2
+    _board = initialize_game_state()
+    for _col in np.arange(_board.shape[1], step=2):
+        _board[: CONNECT_N - 1, _col] = PLAYER1
+        _board[CONNECT_N - 1 :, _col] = PLAYER2
+    for _col in np.arange(1, _board.shape[1] - 1, step=2):
+        _board[CONNECT_N - 1 :, _col] = PLAYER1
+        _board[: CONNECT_N - 1, _col] = PLAYER2
 
-    for col in range(7):
+    for _col in range(7):
         ns = {
             "connected_four_convolve": connected_four_convolve,
-            "board": board,
+            "board": _board,
             "PLAYER1": PLAYER1,
         }
-        t0 = timeit.timeit(
+        ti0 = timeit.timeit(
             "connected_four_convolve(board, PLAYER1)",
             "connected_four_convolve(board, PLAYER1)",
             globals=ns,
             number=number,
         )
-        print(f"Conv version: {t0 / number:.1e}")
+        print(f"Conv version: {ti0 / number:.1e}")
 
-        ns = {"connected_four": connected_four, "board": board, "PLAYER1": PLAYER1}
-        t0 = timeit.timeit(
+        ns = {"connected_four": connected_four, "board": _board, "PLAYER1": PLAYER1}
+        ti0 = timeit.timeit(
             "connected_four(board, PLAYER1)",
             "connected_four(board, PLAYER1)",
             globals=ns,
             number=number,
         )
-        print(f"Dumb version: {t0/number:.1e}")
+        print(f"Dumb version: {ti0 / number:.1e}")
 
         ns = {
             "connected_four": connected_four,
-            "board": board,
+            "board": _board,
             "PLAYER1": PLAYER1,
-            "action": action,
+            "action": _action,
         }
-        t0 = timeit.timeit(
+        ti0 = timeit.timeit(
             "connected_four(board, PLAYER1, action)",
             "connected_four(board, PLAYER1, action)",
             globals=ns,
             number=number,
         )
-        print(f"Smrt version: {t0/number:.1e}")
-        print("="*10)
-
+        print(f"Smrt version: {ti0 / number:.1e}")
+        print("=" * 10)
