@@ -3,18 +3,17 @@ import logging
 from pathlib import Path
 from typing import List, Tuple
 import multiprocessing as mp
-from connectn.utils import configure_logging, parse_arguments
-from connectn.utils import ComfyStockings, ROOT_DATA_DIR, SERVER_PROCESS_DATA_DIR, SERVER_PROCESS_LOG
+import connectn.utils as cu
 
-parse_arguments()
+
+cu.parse_arguments()
 
 
 def run_server():
-    from connectn.utils import LISTEN_PORT, InactiveSocket, PLAY_ALL
     from connectn.game import run_games_process
     from multiprocessing.managers import SyncManager
 
-    configure_logging(SERVER_PROCESS_LOG)
+    cu.configure_logging(cu.SERVER_PROCESS_LOG)
     logger = logging.getLogger(__name__)
 
     manager = SyncManager()
@@ -22,15 +21,18 @@ def run_server():
     sq = mp.Queue()
     rq = manager.Queue()
     shutdown = manager.Event()
-    rg = mp.Process(target=_process_init, args=(run_games_process, sq, rq, shutdown, PLAY_ALL),
-                    name="RunGames")
+    rg = mp.Process(
+        target=_process_init,
+        args=(run_games_process, sq, rq, shutdown, cu.PLAY_ALL),
+        name="RunGames",
+    )
     rg.start()
 
     logger.info("Started run_games process")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ls:
         try:
             ls.settimeout(5.0)
-            ls.bind(("localhost", LISTEN_PORT))
+            ls.bind(("localhost", cu.LISTEN_PORT))
             ls.listen(5)
             logger.info("Started server listening socket")
         except Exception:
@@ -51,7 +53,7 @@ def run_server():
                         logger.info(f"{updated_agent_archives}")
                         sq.put(updated_agent_archives)
                         updated_agent_archives = []
-                except InactiveSocket:
+                except cu.InactiveSocket:
                     logger.exception("Connection failed")
                 except KeyboardInterrupt:
                     inp = input("Shutdown? y/[n] ").lower()
@@ -65,7 +67,7 @@ def run_server():
                         while inp not in ("", "y", "n"):
                             inp = input("Play all games? y/[n] ").lower()
                         if inp == "y":
-                            sq.put("PLAY_ALL")
+                            sq.put("cu.PLAY_ALL")
                 except Exception:
                     logger.exception("Unexpected error, will try to keep running.")
 
@@ -103,17 +105,16 @@ def store_results_local(rq: mp.Queue):
 
 
 def results_file_name_local(file_name: str) -> Path:
-    return (SERVER_PROCESS_DATA_DIR / file_name).with_suffix(".h5")
+    return (cu.SERVER_PROCESS_DATA_DIR / file_name).with_suffix(".h5")
 
 
 def handle_client(cs: socket.socket, updated_agent_archives: list):
     from time import sleep
     from connectn.users import authenticate_user
-    from connectn.utils import PROTOCOL_VERSION
 
     logger = logging.getLogger(__name__)
 
-    with ComfyStockings(cs) as scs:
+    with cu.ComfyStockings(cs) as scs:
         scs.handshake_wait()
 
         try:
@@ -121,7 +122,7 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
         except ValueError:
             client_protocol = -1
 
-        if client_protocol < PROTOCOL_VERSION:
+        if client_protocol < cu.PROTOCOL_VERSION:
             scs.write("PROTOCOL VERSION FAILURE")
         else:
             scs.write("OK")
@@ -152,7 +153,7 @@ def handle_client(cs: socket.socket, updated_agent_archives: list):
 
 
 def handle_upload(
-    scs: ComfyStockings, username: str, updated_agent_archives: List[Tuple[str, str]]
+    scs: cu.ComfyStockings, username: str, updated_agent_archives: List[Tuple[str, str]]
 ) -> str:
     import os
     import tempfile
@@ -162,7 +163,7 @@ def handle_upload(
     scs.write("READY")
     bytes_expected = int(scs.read_wait())
     logger.info(f"Now starting transfer of {bytes_expected} bytes")
-    data = scs.read_wait()
+    data = scs.read_wait(timeout=60.)
     bytes_received = len(data)
     logger.info(f"Received bytes {bytes_received}, expected {bytes_expected}")
     msg = "FAIL"
@@ -184,17 +185,16 @@ def handle_upload(
     return msg
 
 
-def handle_download(scs: ComfyStockings, username: str) -> str:
+def handle_download(scs: cu.ComfyStockings, username: str) -> str:
     import os
     import time
-    from connectn.utils import TOURNAMENT_FILE
 
     logger = logging.getLogger(__name__)
 
     # Client is asked whether to download their agent file, or all matches (tournament)
     msg = scs.read_wait()
     if msg == "TOURNAMENT":
-        results_path = results_file_name_local(TOURNAMENT_FILE)
+        results_path = results_file_name_local(cu.TOURNAMENT_FILE)
     else:
         results_path = results_file_name_local(username)
 
@@ -203,13 +203,13 @@ def handle_download(scs: ComfyStockings, username: str) -> str:
     response = scs.read_wait()
     logger.info(f"Response to prompt: {response}")
     # Client is shown date/time of file creation and prompted whether to download
-    if response == 'GO':
+    if response == "GO":
         logger.info(f"User {username} chose to proceed with download.")
         file_size = os.path.getsize(f"{results_path!s}")
         scs.write(f"{file_size!s}")
         with open(f"{results_path!s}", "rb") as f:
             scs.write(f.read())
-        msg = scs.read_wait(timeout=60.)
+        msg = scs.read_wait(timeout=60.0)
         if msg == "OK":
             logger.info(f"User {username} successfully received results file.")
         else:
@@ -239,9 +239,9 @@ def _process_init(func=None, *args):
 
 
 if __name__ == "__main__":
-    if not ROOT_DATA_DIR.exists():
-        ROOT_DATA_DIR.mkdir()
-    if not SERVER_PROCESS_DATA_DIR.exists():
-        SERVER_PROCESS_DATA_DIR.mkdir()
+    if not cu.ROOT_DATA_DIR.exists():
+        cu.ROOT_DATA_DIR.mkdir()
+    if not cu.SERVER_PROCESS_DATA_DIR.exists():
+        cu.SERVER_PROCESS_DATA_DIR.mkdir()
 
     run_server()
