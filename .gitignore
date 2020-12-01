@@ -1,6 +1,8 @@
-connectn/agents/agent_mctsh
-connectn/agents/agent_mctsr
 connectn/agents/group_*
+
+stunnel/stunnel.conf
+stunnel/stunnel.log
+stunnel/stunnel.pid
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

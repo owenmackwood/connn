@@ -16,6 +16,8 @@ def run_server():
     cu.configure_logging(cu.SERVER_PROCESS_LOG)
     logger = logging.getLogger(__name__)
 
+    cu.start_stunnel(True)
+
     manager = SyncManager()
     manager.start(_process_init)
     sq = mp.Queue()
@@ -67,7 +69,7 @@ def run_server():
                         while inp not in ("", "y", "n"):
                             inp = input("Play all games? y/[n] ").lower()
                         if inp == "y":
-                            sq.put("cu.PLAY_ALL")
+                            sq.put("PLAY_ALL")
                 except Exception:
                     logger.exception("Unexpected error, will try to keep running.")
 

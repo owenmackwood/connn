@@ -54,7 +54,7 @@ def exclude_files(tarinfo):
 
 def connect():
     import socket
-    from connectn.utils import LISTEN_PORT, PROTOCOL_VERSION
+    import connectn.utils as cu
 
     upload = False
     prompt = "Upload agent or download results? u / [d] "
@@ -72,13 +72,15 @@ def connect():
             inp = input(prompt).lower()
         download_agent = inp != "t"
 
+    cu.start_stunnel(False)
+
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as cs:
-            cs.connect(("localhost", LISTEN_PORT))
+            cs.connect(("localhost", cu.LISTEN_PORT))
             with ComfyStockings(cs) as scs:
                 scs.handshake_wait()
 
-                scs.write(f"{PROTOCOL_VERSION:03}")
+                scs.write(f"{cu.PROTOCOL_VERSION:03}")
                 msg = scs.read_wait()
                 if "OK" != msg:
                     raise Exception(f"You need to update your client: {msg}")

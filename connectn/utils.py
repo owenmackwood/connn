@@ -10,6 +10,7 @@ import platform
 import logging
 
 LISTEN_PORT = 2323
+EXTERNAL_PORT = 2324
 PROTOCOL_VERSION = 1
 ARCHIVE_FORMAT = "tar"
 ROOT_DATA_DIR: Path = Path.home() / "tournament"
@@ -218,3 +219,51 @@ def update_user_agent_code(updated_agent_archives: List[Tuple[str, str]]) -> Lis
         results.add_agent(agent_name)
     updated_agents = [agent_name for agent_name, _ in updated_agent_archives]
     return updated_agents
+
+
+def start_stunnel(on_server):
+    import psutil
+    import inspect
+    import subprocess as sp
+
+    is_running = False
+    for proc in psutil.process_iter():
+        try:
+            if "stunnel" in proc.name():
+                is_running = True
+                break
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    if not is_running:
+        output_dir = Path("./stunnel").absolute()
+        conf_file_path = output_dir / "stunnel.conf"
+        server_conf = f"""
+        [PSK server]
+        accept = {"192.168.1.125" if ON_CLUSTER else "localhost"}:{EXTERNAL_PORT}
+        connect = localhost:{LISTEN_PORT}
+        ciphers = PSK"""
+
+        client_conf = f"""
+        [PSK client 1]
+        client = yes
+        accept = localhost:{LISTEN_PORT}
+        connect = cluster.ml.tu-berlin.de:{EXTERNAL_PORT}"""
+
+        stunnel_conf = f"""
+        debug =  7
+        output = {output_dir/"stunnel.log"!s}
+        pid = {output_dir/"stunnel.pid"!s}
+        {server_conf if on_server else client_conf}
+        PSKsecrets = psk.txt
+        """
+        with open(conf_file_path, "wt") as f:
+            f.write(inspect.cleandoc(stunnel_conf))
+
+        sp.run(["fuser", "-kn", "tcp", f"{EXTERNAL_PORT}", f"{LISTEN_PORT}"])
+
+        res = sp.run(["stunnel", "stunnel.conf"], cwd=output_dir)
+        if res.returncode:
+            print("Stunnel failed to start")
+            print(f"{res.stdout}")
+            print(f"{res.stderr}")
