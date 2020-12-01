@@ -7,7 +7,8 @@ from typing import Tuple, Dict, List
 from types import ModuleType
 from connectn.utils import KEY_SALT_FILE, AGENTS_PER_USER
 
-user_auth : Dict[str, Tuple[bytes, bytes]] = {}
+user_auth: Dict[str, Tuple[bytes, bytes]] = {}
+
 
 def load_user_auth() -> Dict[str, Tuple[bytes, bytes]]:
     global user_auth

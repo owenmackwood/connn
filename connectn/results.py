@@ -4,12 +4,12 @@ import tables
 import numpy as np
 import logging
 from tables import IsDescription, Int32Col, StringCol, Float64Col, BoolCol
-from connectn.utils import GAME_PROCESS_DATA_DIR
-from connectn.game import GameResult
+from connectn.utils import TOURNAMENT_PROCESS_DATA_DIR
+from connectn.tournament import GameResult
 from typing import Iterable, List, Dict, Any, TypeVar, Union, Optional
 
 
-RESULTS_FILE_PATH = GAME_PROCESS_DATA_DIR / "results.h5"
+RESULTS_FILE_PATH = TOURNAMENT_PROCESS_DATA_DIR / "results.h5"
 name_size = 32
 outcome_size = 16
 compression_filter = tables.Filters(complevel=9, complib="zlib")
@@ -823,7 +823,7 @@ def agent_games_file_path(agent_name) -> Path:
     -------
     Path
     """
-    return GAME_PROCESS_DATA_DIR / f"{agent_name}.h5"
+    return TOURNAMENT_PROCESS_DATA_DIR / f"{agent_name}.h5"
 
 
 def _version_string(agent_version: int) -> str:

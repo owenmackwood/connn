@@ -10,7 +10,7 @@ cu.parse_arguments()
 
 
 def run_server():
-    from connectn.game import run_games_process
+    from connectn.tournament import run_tournament_process
     from multiprocessing.managers import SyncManager
 
     cu.configure_logging(cu.SERVER_PROCESS_LOG)
@@ -23,7 +23,7 @@ def run_server():
     shutdown = manager.Event()
     rg = mp.Process(
         target=_process_init,
-        args=(run_games_process, sq, rq, shutdown, cu.PLAY_ALL),
+        args=(run_tournament_process, sq, rq, shutdown, cu.PLAY_ALL),
         name="RunGames",
     )
     rg.start()
