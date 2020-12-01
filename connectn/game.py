@@ -540,6 +540,14 @@ def other_player(player: BoardPiece) -> BoardPiece:
 
 
 @nb.njit(cache=True)
+def get_last_row_played(board, last_action):
+    last_row = 0
+    while last_row < board.shape[0] and board[last_row, last_action] != NO_PLAYER:
+        last_row += 1
+    return last_row - 1
+
+
+@nb.njit(cache=True)
 def apply_player_action(
     board: np.ndarray, action: PlayerAction, player: BoardPiece, copy: bool = False
 ) -> np.ndarray:
@@ -554,88 +562,130 @@ def apply_player_action(
 
 @nb.njit(cache=True)
 def connected_four(
-    board: np.ndarray, player: BoardPiece, last_action: Optional[PlayerAction] = None,
+    board: np.ndarray, player: BoardPiece, last_action: Optional[PlayerAction] = None, reduction = False,
 ) -> bool:
+    """
+    Time to check ~20k boards. Random games are played
+    until win or draw, every intermediate board is included in set.
+    Board stats -> mean pieces: 12.3, median: 11.0
+
+    Last action: True,
+        reduction: True: 6.6e-02, 21358 boards (3.1 us / board)
+        reduction: False: 3.3e-02, 21440 boards (1.5 us / board)
+
+    Last action: False,
+        reduction: True: 1.2e-01, 21358 boards (5.6 us / board)
+        reduction: False: 7.8e-02, 21358 boards (3.7 us / board)
+
+    :param board:
+    :param player:
+    :param last_action:
+    :param reduction:
+    :return:
+    """
     rows, cols = PlayerAction(board.shape[0]), PlayerAction(board.shape[1])
+    bb = board == player
+    if reduction:
+        reduced_value = 2 ** (CONNECT_N - 1)
+        bb = bb.astype(np.int8)
 
-    if last_action is None:
-        for col in np.arange(cols - CONNECT_N + 1):
-            for row in np.arange(rows):
-                if np.any(board[row, col : col + CONNECT_N] == NO_PLAYER):
-                    break
-                if np.all(board[row, col : col + CONNECT_N] == player):
+        def dr(vec):
+            for _ in range(CONNECT_N - 1):
+                vec = vec[1:] + vec[:-1]
+            return np.any(vec == reduced_value)
+
+        if last_action is None:
+            c, r = bb.copy(), bb.copy()
+            for _ in range(CONNECT_N - 1):
+                c = c[1:, :] + c[:-1, :]
+                r = r[:, 1:] + r[:, :-1]
+            if np.any(c == reduced_value) or np.any(r == reduced_value):
+                return True
+            # Using the arrays as above is faster
+            # for i in range(rows):
+            #     if dr(bb[i, :]):
+            #         return True
+            # for j in range(cols):
+            #     if dr(bb[:, j]):
+            #         return True
+
+            for dia_k in range(-(rows - CONNECT_N), (cols - CONNECT_N) + 1):
+                if dr(np.diag(bb, dia_k)) or dr(np.diag(bb[::-1, :], dia_k)):
                     return True
+        else:
+            last_row = get_last_row_played(board, last_action)
 
-        for col in np.arange(cols):
-            for row in np.arange(rows - CONNECT_N + 1):
-                if board[row + CONNECT_N - 1, col] == NO_PLAYER:
-                    break
-                if np.all(board[row : row + CONNECT_N, col] == player):
-                    return True
+            ret = (dr(bb[last_row, :]) or
+                   dr(bb[:, last_action]) or
+                   dr(np.diag(bb, k=last_action - last_row)) or
+                   dr(np.diag(bb[::-1, :], k=last_action - (rows - last_row - 1)))
+                   )
 
-        diagonal = np.empty(CONNECT_N, dtype=board.dtype)
-        for col in np.arange(cols - CONNECT_N + 1):
-            for row in np.arange(rows - CONNECT_N + 1):
-                for i in np.arange(PlayerAction(CONNECT_N)):
-                    diagonal[i] = board[row + i, col + i]
-
-                if np.all(diagonal == player):
-                    return True
-
-                for i in np.arange(PlayerAction(CONNECT_N)):
-                    diagonal[i] = board[row + CONNECT_N - (i + 1), col + i]
-
-                if np.all(diagonal == player):
-                    return True
+            return ret
 
     else:
-        last_col = PlayerAction(last_action)
-        last_row = PlayerAction(0)
-        for row in np.arange(rows):
-            if board[row, last_col] != NO_PLAYER:
-                last_row = PlayerAction(row)
+        if last_action is None:
+            rows_edge = rows - CONNECT_N + 1
+            cols_edge = cols - CONNECT_N + 1
 
-        rows_b = max(last_row - CONNECT_N + 1, 0)
+            # Adding early breaks did not speed things up (on average over many random boards)
+            # might have actually slowed it a tiny bit.
+            for i in range(rows):
+                for j in range(cols_edge):
+                    if np.all(bb[i, j:j + CONNECT_N]):
+                        return True
 
-        if last_row >= CONNECT_N - 1 and np.all(
-            board[rows_b : rows_b + CONNECT_N, last_col] == player
-        ):
-            return True
+            for j in range(cols):
+                for i in range(rows_edge):
+                    if np.all(bb[i:i + CONNECT_N, j]):
+                        return True
 
-        cols_r = min(last_col + CONNECT_N, cols)
-        cols_l = max(last_col - CONNECT_N + 1, 0)
+            for i in range(rows_edge):
+                for j in range(cols_edge):
+                    block = bb[i:i + CONNECT_N, j:j + CONNECT_N]
+                    if np.all(np.diag(block)) or np.all(np.diag(block[::-1, :])):
+                        return True
 
-        for col in np.arange(cols_l, cols_r - CONNECT_N + 1):
-            if np.all(board[last_row, col : col + CONNECT_N] == player):
-                return True
+        else:
+            last_row = get_last_row_played(board, last_action)
 
-        diagonal = np.empty(CONNECT_N, dtype=board.dtype)
-
-        for row, col in zip(
-            np.arange(last_row - CONNECT_N + 1, last_row + 1),
-            np.arange(last_col - CONNECT_N + 1, last_col + 1),
-        ):
-            if 0 <= row <= rows - CONNECT_N and 0 <= col <= cols - CONNECT_N:
-                b = board[row : row + CONNECT_N, col : col + CONNECT_N]
-                for i in np.arange(CONNECT_N):
-                    diagonal[i] = b[i, i]
-
-                if np.all(diagonal == player):
+            for j in range(cols - CONNECT_N + 1):
+                if np.all(bb[last_row, j : j + CONNECT_N]):
                     return True
 
-        for row, col in zip(
-            np.arange(last_row + CONNECT_N, last_row - 1, -1),
-            np.arange(last_col - CONNECT_N + 1, last_col + 1),
-        ):
-            if CONNECT_N <= row <= rows and 0 <= col <= cols - CONNECT_N:
-                b = board[row - CONNECT_N : row, col : col + CONNECT_N]
-                for i in np.arange(CONNECT_N):
-                    diagonal[i] = b[CONNECT_N - (i + 1), i]
+            for j in range(rows - CONNECT_N + 1):
+                if np.all(bb[j : j + CONNECT_N, last_action]):
+                    return True
 
-                if np.all(diagonal == player):
+            dia = np.diag(bb, k=last_action - last_row)
+            for i in range(dia.size - CONNECT_N + 1):
+                if np.all(dia[i : i + CONNECT_N]):
+                    return True
+
+            dia = np.diag(bb[::-1, :], k=last_action  - (rows - last_row - 1))
+            for i in range(dia.size - CONNECT_N + 1):
+                if np.all(dia[i: i + CONNECT_N]):
                     return True
 
     return False
+
+
+def connected_four_generators(
+    board: np.ndarray, player: BoardPiece, last_action: PlayerAction
+) -> bool:
+    """
+    Takes 115 us / board, which is about the same as the `connected_four` above if it isn't compiled (1.5 us otherwise).
+    """
+    rows, cols = PlayerAction(board.shape[0]), PlayerAction(board.shape[1])
+    last_row = get_last_row_played(board, last_action)
+    bb = board == player
+
+    return (any(np.all(bb[last_row, j: j + CONNECT_N]) for j in range(cols - CONNECT_N + 1)) or
+            any(np.all(bb[j: j + CONNECT_N, last_action]) for j in range(rows - CONNECT_N + 1)) or
+            any(np.all(dia[i: i + CONNECT_N])
+                    for dia in (np.diag(bb, k=last_action - last_row),
+                                np.diag(bb[::-1, :], k=last_action - (rows - last_row - 1)))
+                        for i in range(dia.size - CONNECT_N + 1)))
 
 
 col_kernel = np.ones((CONNECT_N, 1), dtype=BoardPiece)
@@ -757,52 +807,124 @@ def human_vs_agent(
 
 
 if __name__ == "__main__":
-    import timeit
+    import matplotlib.pyplot as plt
+    benchmark = True
+    if benchmark:
+        import timeit
+        compare_reduct = True
+        if compare_reduct:
+            number = 1000
+            games = 1000
+            all_boards = []
+            sizes = []
+            empty_board = initialize_game_state()
+            for game_n in range(games):
+                board = empty_board.copy()
+                curr_player = PLAYER1
+                end_state = check_end_state(board, curr_player)
+                move_n = 0
+                while end_state == STILL_PLAYING:
+                    move_n += 1
+                    curr_player = other_player(curr_player)
+                    moves = np.array(
+                        [
+                            col
+                            for col in np.arange(PlayerAction(board.shape[1]))
+                            if board[PlayerAction(-1), col] == NO_PLAYER
+                        ]
+                    )
+                    move = np.random.choice(moves, 1)[0]
+                    apply_player_action(board, move, curr_player)
+                    end_state = check_end_state(board, curr_player)
+                    sizes.append((board != NO_PLAYER).sum())
+                    all_boards.append((board, curr_player, move,))
+            sizes = np.array(sizes)
+            print(f"Boards: {np.mean(sizes)} {np.median(sizes)} {(sizes == np.product(empty_board.shape)).sum()}")
+            for la, reduction in ((True, False), (False, False)):  #(True, True), (False, True),
+                ns = {
+                    "cf": connected_four,
+                    "all_boards": all_boards,
+                    "board": empty_board,
+                    "PLAYER1": PLAYER1,
+                    "r": reduction,
+                    "la": la,
+                }
+                ti0 = timeit.timeit(
+                    "[cf(b, p, last_action=m if la else None, reduction=r) for b, p, m in all_boards]",
+                    "cf(board, PLAYER1)",
+                    globals=ns,
+                    number=number,
+                )
+                tot_time = ti0 / number
+                per_board = tot_time / len(all_boards)
+                print(f"Last action: {la}, reduction: {reduction}:  {tot_time:.1e} sec total, {len(all_boards)} boards ({per_board*1e6:.3} us per board)")
+            # for fn in (connected_four, connected_four_ultimate):
+            #     ns = {
+            #         "cf": fn,
+            #         "all_boards": all_boards,
+            #         "board": empty_board,
+            #         "PLAYER1": PLAYER1,
+            #     }
+            #     ti0 = timeit.timeit(
+            #         "[cf(b, p, m) for b, p, m in all_boards]",
+            #         "cf(board, PLAYER1, 0)",
+            #         globals=ns,
+            #         number=number,
+            #     )
+            #     tot_time = ti0 / number
+            #     per_board = tot_time / len(all_boards)
+            #     print(f"{fn}: {tot_time:.1e} sec total, {len(all_boards)} boards ({per_board*1e6:.3} us per board)")
 
-    _action = PlayerAction(3)
-    number = 10000
-    _board = initialize_game_state()
-    for _col in np.arange(_board.shape[1], step=2):
-        _board[: CONNECT_N - 1, _col] = PLAYER1
-        _board[CONNECT_N - 1 :, _col] = PLAYER2
-    for _col in np.arange(1, _board.shape[1] - 1, step=2):
-        _board[CONNECT_N - 1 :, _col] = PLAYER1
-        _board[: CONNECT_N - 1, _col] = PLAYER2
+            plt.hist(sizes, bins=41)
+            plt.show()
 
-    for _col in range(7):
-        ns = {
-            "connected_four_convolve": connected_four_convolve,
-            "board": _board,
-            "PLAYER1": PLAYER1,
-        }
-        ti0 = timeit.timeit(
-            "connected_four_convolve(board, PLAYER1)",
-            "connected_four_convolve(board, PLAYER1)",
-            globals=ns,
-            number=number,
-        )
-        print(f"Conv version: {ti0 / number:.1e}")
+        else:
+            _action = PlayerAction(3)
+            number = 10000
+            _board = initialize_game_state()
+            for _col in np.arange(_board.shape[1], step=2):
+                _board[: CONNECT_N - 1, _col] = PLAYER1
+                _board[CONNECT_N - 1 :, _col] = PLAYER2
+            for _col in np.arange(1, _board.shape[1] - 1, step=2):
+                _board[CONNECT_N - 1 :, _col] = PLAYER1
+                _board[: CONNECT_N - 1, _col] = PLAYER2
 
-        ns = {"connected_four": connected_four, "board": _board, "PLAYER1": PLAYER1}
-        ti0 = timeit.timeit(
-            "connected_four(board, PLAYER1)",
-            "connected_four(board, PLAYER1)",
-            globals=ns,
-            number=number,
-        )
-        print(f"Dumb version: {ti0 / number:.1e}")
+            for _col in range(7):
+                ns = {
+                    "connected_four_convolve": connected_four_convolve,
+                    "board": _board,
+                    "PLAYER1": PLAYER1,
+                }
+                ti0 = timeit.timeit(
+                    "connected_four_convolve(board, PLAYER1)",
+                    "connected_four_convolve(board, PLAYER1)",
+                    globals=ns,
+                    number=number,
+                )
+                print(f"Conv version: {ti0 / number:.1e}")
 
-        ns = {
-            "connected_four": connected_four,
-            "board": _board,
-            "PLAYER1": PLAYER1,
-            "action": _action,
-        }
-        ti0 = timeit.timeit(
-            "connected_four(board, PLAYER1, action)",
-            "connected_four(board, PLAYER1, action)",
-            globals=ns,
-            number=number,
-        )
-        print(f"Smrt version: {ti0 / number:.1e}")
-        print("=" * 10)
+                ns = {"connected_four": connected_four, "board": _board, "PLAYER1": PLAYER1}
+                ti0 = timeit.timeit(
+                    "connected_four(board, PLAYER1)",
+                    "connected_four(board, PLAYER1)",
+                    globals=ns,
+                    number=number,
+                )
+                print(f"Dumb version: {ti0 / number:.1e}")
+
+                ns = {
+                    "connected_four": connected_four,
+                    "board": _board,
+                    "PLAYER1": PLAYER1,
+                    "action": _action,
+                }
+                ti0 = timeit.timeit(
+                    "connected_four(board, PLAYER1, action)",
+                    "connected_four(board, PLAYER1, action)",
+                    globals=ns,
+                    number=number,
+                )
+                print(f"Smrt version: {ti0 / number:.1e}")
+                print("=" * 10)
+    else:
+        human_vs_agent(user_move)

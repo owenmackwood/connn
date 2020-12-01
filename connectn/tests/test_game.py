@@ -159,7 +159,7 @@ def test_connected_four_last_action(empty_board: np.ndarray):
 def test_connected_four_oracle(empty_board: np.ndarray):
     from connectn.game import check_end_state, other_player, apply_player_action
     from connectn.game import PlayerAction, NO_PLAYER
-    from connectn.game import connected_four_convolve, connected_four
+    from connectn.game import connected_four_convolve, connected_four, connected_four_generators
 
     for game_n in range(1000):
         board = empty_board.copy()
@@ -181,10 +181,16 @@ def test_connected_four_oracle(empty_board: np.ndarray):
             end_state = check_end_state(board, curr_player)
 
             conn_4_a = connected_four_convolve(board, curr_player)
-            conn_4_b = connected_four(board, curr_player, move)
-            conn_4_c = connected_four(board, curr_player)
+            conn_4_b = connected_four(board, curr_player, move, True)
+            conn_4_b2 = connected_four(board, curr_player, move, False)
+            conn_4_c = connected_four(board, curr_player, None, True)
+            conn_4_c2 = connected_four(board, curr_player, None, False)
+            conn_4_u = connected_four_generators(board, curr_player, move)
             assert conn_4_a == conn_4_b
-            assert conn_4_b == conn_4_c
+            assert conn_4_b == conn_4_b2
+            assert conn_4_b2 == conn_4_c
+            assert conn_4_c == conn_4_c2
+            assert conn_4_c2 == conn_4_u
 
 
 def test_connected_four_convolve(empty_board: np.ndarray):
@@ -323,6 +329,7 @@ def test_run_game_cluster(monkeypatch):
 
     def mock_add_game(game_result):
         assert isinstance(game_result, GameResult)
+
 
     monkeypatch.setattr(gridmap, "grid_map", mock_grid_map)
     monkeypatch.setattr(results, "add_game", mock_add_game)
