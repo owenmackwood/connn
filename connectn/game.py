@@ -4,7 +4,6 @@ from typing import Optional, Callable
 from enum import Enum
 import connectn.utils as cu
 import numba as nb
-from scipy.signal.sigtools import _convolve2d
 
 CONNECT_N = np.int8(4)
 PlayerAction = np.int8
@@ -231,6 +230,7 @@ dia_r_kernel = np.array(np.diag(np.ones(CONNECT_N, dtype=BoardPiece))[::-1, :])
 
 
 def connected_four_convolve(board: np.ndarray, player: BoardPiece,) -> bool:
+    from scipy.signal.sigtools import _convolve2d
     # No point in using last_action here because it isn't any faster.
     # rows, cols = board.shape
     #
