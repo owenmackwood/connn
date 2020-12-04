@@ -2,7 +2,7 @@
 
 I wrote this project to run tournaments for game-playing agents written by my students. The idea came from
 an undergraduate AI course I took (many years ago now). In contrast to that course, the objective of the course I 
-taught was not just to teach them about AI, but also good software development practices. My students came from
+taught was not just to introduce them to AI, but also good software development practices. My students came from
 various backgrounds, and most had limited software development experience. As such, I created a few lessons to try
 and get them up to speed as quickly as possible. The content of those lessons can be found in the [Wiki](https://github.com/owenmackwood/connn/wiki).
 
